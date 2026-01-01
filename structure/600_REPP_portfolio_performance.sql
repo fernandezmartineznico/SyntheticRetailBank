@@ -27,13 +27,13 @@
 --    └─ AUTO-REFRESH: Based on source table changes
 --
 -- DATA FLOW:
--- PAY_RAW_001.PAYI_TRANSACTIONS (cash transactions)
+-- PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS (cash transactions)
 --     +
--- EQT_RAW_001.EQTI_TRADES (equity trades)
+-- EQT_RAW_001.EQTI_RAW_TB_TRADES (equity trades)
 --     +
--- FII_RAW_001.FIII_TRADES (fixed income trades)
+-- FII_RAW_001.FIII_RAW_TB_TRADES (fixed income trades)
 --     +
--- CMD_RAW_001.CMDI_TRADES (commodity trades)
+-- CMD_RAW_001.CMDI_RAW_TB_TRADES (commodity trades)
 --     +
 -- PAY_AGG_001.PAYA_AGG_DT_ACCOUNT_BALANCES (current balances)
 --     +
@@ -87,7 +87,7 @@ CREATE OR REPLACE DYNAMIC TABLE REPP_AGG_DT_PORTFOLIO_PERFORMANCE(
     CASH_DEPOSITS DECIMAL(38,2) COMMENT 'Total cash deposits during period',
     CASH_WITHDRAWALS DECIMAL(38,2) COMMENT 'Total cash withdrawals during period',
     CASH_NET_FLOW DECIMAL(38,2) COMMENT 'Net cash flow (deposits - withdrawals)',
-    CASH_TWR_PERCENTAGE DECIMAL(20,4) COMMENT 'Time Weighted Return for cash account (%)',
+    CASH_TWR_PERCENTAGE DECIMAL(38,4) COMMENT 'Time Weighted Return for cash account (%)',
     
     -- Equity Trading Metrics
     EQUITY_TRADES_COUNT NUMBER(10,0) COMMENT 'Number of equity trades during period',
@@ -97,7 +97,7 @@ CREATE OR REPLACE DYNAMIC TABLE REPP_AGG_DT_PORTFOLIO_PERFORMANCE(
     EQUITY_REALIZED_PL_CHF DECIMAL(38,2) COMMENT 'Realized profit/loss from equity sales (CHF)',
     EQUITY_COMMISSION_CHF DECIMAL(38,2) COMMENT 'Total trading commissions paid (CHF)',
     EQUITY_NET_RETURN_CHF DECIMAL(38,2) COMMENT 'Net return from equity trading (realized P and L - commissions)',
-    EQUITY_RETURN_PERCENTAGE DECIMAL(20,4) COMMENT 'Equity return percentage (net return / invested)',
+    EQUITY_RETURN_PERCENTAGE DECIMAL(38,4) COMMENT 'Equity return percentage (net return / invested)',
     
     -- Fixed Income Trading Metrics
     FI_TRADES_COUNT NUMBER(10,0) COMMENT 'Number of fixed income trades during period',
@@ -106,7 +106,7 @@ CREATE OR REPLACE DYNAMIC TABLE REPP_AGG_DT_PORTFOLIO_PERFORMANCE(
     FI_TOTAL_INVESTED_CHF DECIMAL(38,2) COMMENT 'Total amount invested in fixed income (CHF)',
     FI_NET_PL_CHF DECIMAL(38,2) COMMENT 'Net profit/loss from fixed income trading (CHF)',
     FI_COMMISSION_CHF DECIMAL(38,2) COMMENT 'Total fixed income trading commissions (CHF)',
-    FI_RETURN_PERCENTAGE DECIMAL(20,4) COMMENT 'Fixed income return percentage',
+    FI_RETURN_PERCENTAGE DECIMAL(38,4) COMMENT 'Fixed income return percentage',
     
     -- Commodity Trading Metrics
     CMD_TRADES_COUNT NUMBER(10,0) COMMENT 'Number of commodity trades during period',
@@ -115,7 +115,7 @@ CREATE OR REPLACE DYNAMIC TABLE REPP_AGG_DT_PORTFOLIO_PERFORMANCE(
     CMD_TOTAL_INVESTED_CHF DECIMAL(38,2) COMMENT 'Total amount invested in commodities (CHF)',
     CMD_NET_PL_CHF DECIMAL(38,2) COMMENT 'Net profit/loss from commodity trading (CHF)',
     CMD_COMMISSION_CHF DECIMAL(38,2) COMMENT 'Total commodity trading commissions (CHF)',
-    CMD_RETURN_PERCENTAGE DECIMAL(20,4) COMMENT 'Commodity return percentage',
+    CMD_RETURN_PERCENTAGE DECIMAL(38,4) COMMENT 'Commodity return percentage',
     
     -- Portfolio Allocation
     CURRENT_CASH_VALUE_CHF DECIMAL(38,2) COMMENT 'Current cash position value (CHF)',
@@ -126,25 +126,25 @@ CREATE OR REPLACE DYNAMIC TABLE REPP_AGG_DT_PORTFOLIO_PERFORMANCE(
     CURRENT_CMD_POSITIONS NUMBER(10,0) COMMENT 'Number of open commodity positions',
     CURRENT_CMD_VALUE_CHF DECIMAL(38,2) COMMENT 'Current value of commodity positions (at cost, CHF)',
     TOTAL_PORTFOLIO_VALUE_CHF DECIMAL(38,2) COMMENT 'Total portfolio value (cash + all asset classes at cost)',
-    CASH_ALLOCATION_PERCENTAGE DECIMAL(20,4) COMMENT 'Percentage of portfolio in cash',
-    EQUITY_ALLOCATION_PERCENTAGE DECIMAL(20,4) COMMENT 'Percentage of portfolio in equities',
-    FI_ALLOCATION_PERCENTAGE DECIMAL(20,4) COMMENT 'Percentage of portfolio in fixed income',
-    CMD_ALLOCATION_PERCENTAGE DECIMAL(20,4) COMMENT 'Percentage of portfolio in commodities',
+    CASH_ALLOCATION_PERCENTAGE DECIMAL(38,4) COMMENT 'Percentage of portfolio in cash',
+    EQUITY_ALLOCATION_PERCENTAGE DECIMAL(38,4) COMMENT 'Percentage of portfolio in equities',
+    FI_ALLOCATION_PERCENTAGE DECIMAL(38,4) COMMENT 'Percentage of portfolio in fixed income',
+    CMD_ALLOCATION_PERCENTAGE DECIMAL(38,4) COMMENT 'Percentage of portfolio in commodities',
     
     -- Integrated Performance Metrics
-    TOTAL_PORTFOLIO_TWR_PERCENTAGE DECIMAL(20,4) COMMENT 'Combined Time Weighted Return for entire portfolio (%)',
+    TOTAL_PORTFOLIO_TWR_PERCENTAGE DECIMAL(38,4) COMMENT 'Combined Time Weighted Return for entire portfolio (%)',
     TOTAL_RETURN_CHF DECIMAL(38,2) COMMENT 'Total portfolio return in CHF',
-    ANNUALIZED_PORTFOLIO_TWR DECIMAL(20,4) COMMENT 'Annualized portfolio TWR (%)',
+    ANNUALIZED_PORTFOLIO_TWR DECIMAL(38,4) COMMENT 'Annualized portfolio TWR (%) - capped at +/-10000% to prevent overflow',
     
     -- Risk Metrics
-    PORTFOLIO_VOLATILITY DECIMAL(20,4) COMMENT 'Portfolio volatility (standard deviation of returns)',
-    SHARPE_RATIO DECIMAL(20,4) COMMENT 'Risk-adjusted return (Sharpe Ratio)',
+    PORTFOLIO_VOLATILITY DECIMAL(38,4) COMMENT 'Portfolio volatility (standard deviation of returns)',
+    SHARPE_RATIO DECIMAL(38,4) COMMENT 'Risk-adjusted return (Sharpe Ratio)',
     RISK_FREE_RATE_ANNUAL_PCT DECIMAL(8,2) COMMENT 'Annual risk-free rate used in Sharpe calculation',
-    MAX_DRAWDOWN_PERCENTAGE DECIMAL(20,4) COMMENT 'Maximum peak-to-trough decline (%)',
+    MAX_DRAWDOWN_PERCENTAGE DECIMAL(38,4) COMMENT 'Maximum peak-to-trough decline (%)',
     
     -- Activity Metrics
     TOTAL_TRANSACTIONS NUMBER(10,0) COMMENT 'Total transactions (cash + equity)',
-    TRANSACTION_FREQUENCY DECIMAL(20,4) COMMENT 'Average transactions per month',
+    TRANSACTION_FREQUENCY DECIMAL(38,4) COMMENT 'Average transactions per month',
     TRADING_DAYS NUMBER(10,0) COMMENT 'Number of days with trading activity',
     
     -- Performance Classification
@@ -175,7 +175,7 @@ cash_performance AS (
         -- TWR calculation for cash (simplified - using balance changes)
         COUNT(*) as cash_transaction_count,
         COUNT(DISTINCT DATE(t.BOOKING_DATE)) as cash_trading_days
-    FROM AAA_DEV_SYNTHETIC_BANK.PAY_RAW_001.PAYI_TRANSACTIONS t
+    FROM AAA_DEV_SYNTHETIC_BANK.PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS t
     WHERE t.BOOKING_DATE >= CURRENT_DATE - INTERVAL '450 days'
     GROUP BY t.ACCOUNT_ID
 ),
@@ -200,7 +200,7 @@ equity_performance AS (
         SUM(CASE WHEN t.SIDE = '1' THEN ABS(t.BASE_GROSS_AMOUNT) ELSE 0 END) as realized_pl_chf,
         
         COUNT(DISTINCT DATE(t.TRADE_DATE)) as equity_trading_days
-    FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_TRADES t
+    FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_RAW_TB_TRADES t
     WHERE t.TRADE_DATE >= CURRENT_DATE - INTERVAL '450 days'
     GROUP BY t.ACCOUNT_ID
 ),
@@ -217,7 +217,7 @@ fixed_income_performance AS (
         -- Simplified P and L calculation
         SUM(CASE WHEN t.SIDE = '2' THEN ABS(t.BASE_GROSS_AMOUNT) ELSE -ABS(t.BASE_GROSS_AMOUNT) END) as fi_net_pl_chf,
         COUNT(DISTINCT DATE(t.TRADE_DATE)) as fi_trading_days
-    FROM AAA_DEV_SYNTHETIC_BANK.FII_RAW_001.FIII_TRADES t
+    FROM AAA_DEV_SYNTHETIC_BANK.FII_RAW_001.FIII_RAW_TB_TRADES t
     WHERE t.TRADE_DATE >= CURRENT_DATE - INTERVAL '450 days'
     GROUP BY t.ACCOUNT_ID
 ),
@@ -234,7 +234,7 @@ commodity_performance AS (
         -- Simplified P and L calculation
         SUM(CASE WHEN t.SIDE = '2' THEN ABS(t.BASE_GROSS_AMOUNT) ELSE -ABS(t.BASE_GROSS_AMOUNT) END) as cmd_net_pl_chf,
         COUNT(DISTINCT DATE(t.TRADE_DATE)) as cmd_trading_days
-    FROM AAA_DEV_SYNTHETIC_BANK.CMD_RAW_001.CMDI_TRADES t
+    FROM AAA_DEV_SYNTHETIC_BANK.CMD_RAW_001.CMDI_RAW_TB_TRADES t
     WHERE t.TRADE_DATE >= CURRENT_DATE - INTERVAL '450 days'
     GROUP BY t.ACCOUNT_ID
 ),
@@ -247,7 +247,7 @@ current_balances AS (
         -- Calculate starting balance by subtracting net cash flow from current balance
         b.CURRENT_BALANCE_BASE - COALESCE((
             SELECT SUM(t.AMOUNT)
-            FROM AAA_DEV_SYNTHETIC_BANK.PAY_RAW_001.PAYI_TRANSACTIONS t
+            FROM AAA_DEV_SYNTHETIC_BANK.PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS t
             WHERE t.ACCOUNT_ID = b.ACCOUNT_ID
               AND t.BOOKING_DATE >= CURRENT_DATE - INTERVAL '450 days'
         ), 0) as starting_cash_balance
@@ -466,39 +466,44 @@ SELECT
         (COALESCE(ep.realized_pl_chf, 0) - COALESCE(ep.total_commission_chf, 0)), 2
     ) as TOTAL_RETURN_CHF,
     
-    -- Annualized TWR
+    -- Annualized TWR (with overflow protection and minimum period requirement)
     ROUND(
         CASE 
-            WHEN COALESCE(cp.days_in_period, 450) > 0 THEN
-                (POWER(1 + (
-                    (
-                        CASE 
-                            WHEN COALESCE(cb.starting_cash_balance, 0) > 0 THEN
-                                ((COALESCE(cb.current_cash_balance, 0) - COALESCE(cb.starting_cash_balance, 0) - COALESCE(cp.net_cash_flow, 0)) / 
-                                 COALESCE(cb.starting_cash_balance, 0)) * 100
-                            ELSE 0
-                        END * 
-                        CASE 
-                            WHEN (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0)) > 0 THEN
-                                COALESCE(cb.starting_cash_balance, 0) / (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0))
-                            ELSE 1
-                        END
-                    ) +
-                    (
-                        CASE 
-                            WHEN COALESCE(ep.total_invested_chf, 0) > 0 THEN
-                                ((COALESCE(ep.realized_pl_chf, 0) - COALESCE(ep.total_commission_chf, 0)) / 
-                                 COALESCE(ep.total_invested_chf, 0)) * 100
-                            ELSE 0
-                        END *
-                        CASE 
-                            WHEN (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0)) > 0 THEN
-                                COALESCE(ep.total_invested_chf, 0) / (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0))
-                            ELSE 0
-                        END
-                    )
-                ) / 100, 365.0 / COALESCE(cp.days_in_period, 450)) - 1) * 100
-            ELSE 0
+            -- Only annualize if we have at least 30 days of data to avoid unrealistic extrapolation
+            WHEN COALESCE(cp.days_in_period, 450) >= 30 THEN
+                -- Calculate the portfolio TWR first
+                LEAST(GREATEST(
+                    (POWER(1 + (
+                        (
+                            CASE 
+                                WHEN COALESCE(cb.starting_cash_balance, 0) > 0 THEN
+                                    ((COALESCE(cb.current_cash_balance, 0) - COALESCE(cb.starting_cash_balance, 0) - COALESCE(cp.net_cash_flow, 0)) / 
+                                     COALESCE(cb.starting_cash_balance, 0)) * 100
+                                ELSE 0
+                            END * 
+                            CASE 
+                                WHEN (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0)) > 0 THEN
+                                    COALESCE(cb.starting_cash_balance, 0) / (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0))
+                                ELSE 1
+                            END
+                        ) +
+                        (
+                            CASE 
+                                WHEN COALESCE(ep.total_invested_chf, 0) > 0 THEN
+                                    ((COALESCE(ep.realized_pl_chf, 0) - COALESCE(ep.total_commission_chf, 0)) / 
+                                     COALESCE(ep.total_invested_chf, 0)) * 100
+                                ELSE 0
+                            END *
+                            CASE 
+                                WHEN (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0)) > 0 THEN
+                                    COALESCE(ep.total_invested_chf, 0) / (COALESCE(cb.starting_cash_balance, 0) + COALESCE(ep.total_invested_chf, 0))
+                                ELSE 0
+                            END
+                        )
+                    ) / 100, 365.0 / COALESCE(cp.days_in_period, 450)) - 1) * 100,
+                    -10000  -- Cap at -10000% (total loss is realistic)
+                ), 10000)  -- Cap at +10000% to prevent overflow
+            ELSE 0  -- Return 0 if period is less than 30 days (insufficient data for annualization)
         END, 4
     ) as ANNUALIZED_PORTFOLIO_TWR,
     

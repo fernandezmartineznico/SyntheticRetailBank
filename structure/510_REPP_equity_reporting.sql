@@ -28,7 +28,7 @@
 --    └─ AUTO-REFRESH: Based on source table changes
 --
 -- DATA FLOW:
--- EQT_RAW_001.EQTI_TRADES (raw equity trades)
+-- EQT_RAW_001.EQTI_RAW_TB_TRADES (raw equity trades)
 --     ↓
 -- REP_AGG_001.REPP_AGG_DT_EQUITY_* (reporting tables)
 --
@@ -82,7 +82,7 @@ SELECT
     AVG(ABS(t.BASE_GROSS_AMOUNT)) AS AVG_TRADE_SIZE_CHF,        -- Average trade size for customer profiling
     MIN(t.TRADE_DATE) AS FIRST_TRADE_DATE,                       -- First trading activity date
     MAX(t.TRADE_DATE) AS LAST_TRADE_DATE                         -- Most recent trading activity date
-FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_TRADES t
+FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_RAW_TB_TRADES t
 LEFT JOIN AAA_DEV_SYNTHETIC_BANK.CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS a ON t.ACCOUNT_ID = a.ACCOUNT_ID
 GROUP BY t.CUSTOMER_ID, t.ACCOUNT_ID, a.BASE_CURRENCY;
 
@@ -117,7 +117,7 @@ SELECT
     MIN(PRICE) AS MIN_PRICE,                                     -- Lowest trading price observed
     MAX(PRICE) AS MAX_PRICE,                                     -- Highest trading price observed
     MAX(TRADE_DATE) AS LAST_TRADE_DATE                           -- Most recent trading date for this security
-FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_TRADES
+FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_RAW_TB_TRADES
 GROUP BY SYMBOL, ISIN;
 
 -- Equity currency exposure (similar to FX exposure for trades)
@@ -145,7 +145,7 @@ SELECT
     MAX(FX_RATE) AS MAX_FX_RATE,                                 -- Maximum FX rate observed
     COUNT(DISTINCT CUSTOMER_ID) AS UNIQUE_CUSTOMERS,            -- Number of customers trading in this currency
     COUNT(DISTINCT SYMBOL) AS UNIQUE_SYMBOLS                    -- Number of different securities traded in this currency
-FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_TRADES
+FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_RAW_TB_TRADES
 WHERE CURRENCY != 'CHF'
 GROUP BY CURRENCY;
 
@@ -178,7 +178,7 @@ SELECT
     ABS(BASE_GROSS_AMOUNT) AS CHF_VALUE,                         -- Trade value in CHF for threshold monitoring
     MARKET,                                                      -- Market/exchange where trade was executed
     VENUE                                                        -- Trading venue for best execution analysis
-FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_TRADES
+FROM AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001.EQTI_RAW_TB_TRADES
 WHERE ABS(BASE_GROSS_AMOUNT) > 100000 -- Trades over 100k CHF
 ORDER BY ABS(BASE_GROSS_AMOUNT) DESC;
 

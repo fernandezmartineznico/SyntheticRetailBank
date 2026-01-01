@@ -20,19 +20,19 @@
 --
 -- OBJECTS CREATED:
 -- ┌─ STAGES (1):
--- │  └─ EQTI_TRADES      - Equity trade files
+-- │  └─ EQTI_RAW_TB_TRADES      - Equity trade files
 -- │
 -- ├─ FILE FORMATS (1):
 -- │  └─ EQTI_FF_TRADES_CSV - Equity trade CSV format
 -- │
 -- ├─ TABLES (1):
--- │  └─ EQTI_TRADES - Equity trades with FIX protocol compliance
+-- │  └─ EQTI_RAW_TB_TRADES - Equity trades with FIX protocol compliance
 -- │
 -- ├─ STREAMS (1):
--- │  └─ EQTI_STREAM_TRADES_FILES - Detects new trade files
+-- │  └─ EQTI_RAW_STREAM_TRADES_FILES - Detects new trade files
 -- │
 -- └─ TASKS (1):
---    └─ EQTI_TASK_LOAD_TRADES - Automated trade loading
+--    └─ EQTI_RAW_TASK_LOAD_TRADES - Automated trade loading
 --
 -- DATA ARCHITECTURE:
 -- File Upload → Stage → Stream Detection → Task Processing → Table
@@ -59,7 +59,7 @@ USE SCHEMA EQT_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Equity trade data stage
-CREATE OR REPLACE STAGE EQTI_TRADES
+CREATE OR REPLACE STAGE EQTI_RAW_STAGE_TRADES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -92,17 +92,17 @@ CREATE OR REPLACE FILE FORMAT EQTI_FF_TRADES_CSV
 -- ============================================================
 
 -- ============================================================
--- EQTI_TRADES - Equity Trades with FIX Protocol Compliance
+-- EQTI_RAW_TB_TRADES - Equity Trades with FIX Protocol Compliance
 -- ============================================================
 -- Equity trading data via FIX protocol with CHF as base currency
 -- for retail banking investment operations
 
-CREATE OR REPLACE TABLE EQTI_TRADES (
+CREATE OR REPLACE TABLE EQTI_RAW_TB_TRADES (
     TRADE_DATE TIMESTAMP_NTZ NOT NULL COMMENT 'Trade execution timestamp (ISO 8601 UTC format)',
     SETTLEMENT_DATE DATE NOT NULL COMMENT 'Settlement date (YYYY-MM-DD)',
     TRADE_ID VARCHAR(50) NOT NULL COMMENT 'Unique trade identifier',
     CUSTOMER_ID VARCHAR(30) NOT NULL COMMENT 'Reference to customer',
-    ACCOUNT_ID VARCHAR(30) NOT NULL COMMENT 'Investment account used for settlement (References ACCI_ACCOUNTS.ACCOUNT_ID where ACCOUNT_TYPE = ''INVESTMENT'')',
+    ACCOUNT_ID VARCHAR(30) NOT NULL COMMENT 'Investment account used for settlement (References ACCI_RAW_TB_ACCOUNTS.ACCOUNT_ID where ACCOUNT_TYPE = ''INVESTMENT'')',
     ORDER_ID VARCHAR(50) NOT NULL COMMENT 'Order reference',
     EXEC_ID VARCHAR(50) NOT NULL COMMENT 'Execution reference',
     SYMBOL VARCHAR(20) NOT NULL COMMENT 'Stock symbol',
@@ -129,9 +129,9 @@ CREATE OR REPLACE TABLE EQTI_TRADES (
     CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
 
     -- Constraints
-    CONSTRAINT PK_EQTI_TRADES PRIMARY KEY (TRADE_ID),
-    CONSTRAINT FK_EQTI_TRADES_ACCOUNT FOREIGN KEY (ACCOUNT_ID) REFERENCES AAA_DEV_SYNTHETIC_BANK.CRM_RAW_001.ACCI_ACCOUNTS(ACCOUNT_ID)
-    -- FK to CRMI_CUSTOMER removed due to SCD Type 2 composite PK
+    CONSTRAINT PK_EQTI_RAW_TB_TRADES PRIMARY KEY (TRADE_ID),
+    CONSTRAINT FK_EQTI_RAW_TB_TRADES_ACCOUNT FOREIGN KEY (ACCOUNT_ID) REFERENCES AAA_DEV_SYNTHETIC_BANK.CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS(ACCOUNT_ID)
+    -- FK to CRMI_RAW_TB_CUSTOMER removed due to SCD Type 2 composite PK
     -- CHECK constraints not supported in Snowflake - replaced with comments for documentation
     -- CHK_EQ_SIDE: SIDE should be '1' (Buy) or '2' (Sell) per FIX protocol
     -- CHK_EQ_CURRENCY: CURRENCY should be in ('USD', 'EUR', 'GBP', 'JPY', 'CHF')
@@ -143,7 +143,7 @@ CREATE OR REPLACE TABLE EQTI_TRADES (
     -- CHK_EQ_SETTLEMENT_DATE: SETTLEMENT_DATE should be >= TRADE_DATE
     -- CHK_EQ_ACCOUNT_TYPE: Referenced ACCOUNT_ID should have ACCOUNT_TYPE = 'INVESTMENT'
 )
-COMMENT = 'Equity trades via FIX protocol with CHF as base currency. Uses INVESTMENT accounts from ACCI_ACCOUNTS. Signed amounts: positive for purchases, negative for sales.';
+COMMENT = 'Equity trades via FIX protocol with CHF as base currency. Uses INVESTMENT accounts from ACCI_RAW_TB_ACCOUNTS. Signed amounts: positive for purchases, negative for sales.';
 
 -- ============================================================
 -- CHANGE DETECTION STREAMS - File Monitoring
@@ -153,9 +153,9 @@ COMMENT = 'Equity trades via FIX protocol with CHF as base currency. Uses INVEST
 -- tracking for reliable data pipeline processing.
 
 -- Equity trade file detection stream
-CREATE OR REPLACE STREAM EQTI_STREAM_TRADES_FILES
-    ON STAGE EQTI_TRADES
-    COMMENT = 'Monitors EQTI_TRADES stage for new equity trade CSV files. Triggers EQTI_TASK_LOAD_TRADES when files matching *trades*.csv pattern are detected';
+CREATE OR REPLACE STREAM EQTI_RAW_STREAM_TRADES_FILES
+    ON STAGE EQTI_RAW_STAGE_TRADES
+    COMMENT = 'Monitors EQTI_RAW_STAGE_TRADES stage for new equity trade CSV files. Triggers EQTI_RAW_TASK_LOAD_TRADES when files matching *trades*.csv pattern are detected';
 
 -- ============================================================
 -- AUTOMATED PROCESSING TASKS - Data Pipeline Orchestration
@@ -165,13 +165,13 @@ CREATE OR REPLACE STREAM EQTI_STREAM_TRADES_FILES
 -- usage. Error handling continues processing despite individual record failures.
 
 -- Equity trade loading task
-CREATE OR REPLACE TASK EQTI_TASK_LOAD_TRADES
+CREATE OR REPLACE TASK EQTI_RAW_TASK_LOAD_TRADES
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('EQTI_STREAM_TRADES_FILES')
+    WHEN SYSTEM$STREAM_HAS_DATA('EQTI_RAW_STREAM_TRADES_FILES')
 AS
-    COPY INTO EQTI_TRADES (TRADE_DATE, SETTLEMENT_DATE, TRADE_ID, CUSTOMER_ID, ACCOUNT_ID, ORDER_ID, EXEC_ID, SYMBOL, ISIN, SIDE, QUANTITY, PRICE, CURRENCY, GROSS_AMOUNT, COMMISSION, NET_AMOUNT, BASE_CURRENCY, BASE_GROSS_AMOUNT, BASE_NET_AMOUNT, FX_RATE, MARKET, ORDER_TYPE, EXEC_TYPE, TIME_IN_FORCE, BROKER_ID, VENUE)
-    FROM @EQTI_TRADES
+    COPY INTO EQTI_RAW_TB_TRADES (TRADE_DATE, SETTLEMENT_DATE, TRADE_ID, CUSTOMER_ID, ACCOUNT_ID, ORDER_ID, EXEC_ID, SYMBOL, ISIN, SIDE, QUANTITY, PRICE, CURRENCY, GROSS_AMOUNT, COMMISSION, NET_AMOUNT, BASE_CURRENCY, BASE_GROSS_AMOUNT, BASE_NET_AMOUNT, FX_RATE, MARKET, ORDER_TYPE, EXEC_TYPE, TIME_IN_FORCE, BROKER_ID, VENUE)
+    FROM @EQTI_RAW_STAGE_TRADES
     PATTERN = '.*trades.*\.csv'
     FILE_FORMAT = EQTI_FF_TRADES_CSV
     ON_ERROR = CONTINUE;
@@ -183,7 +183,7 @@ AS
 -- controlled deployment and testing before enabling automated data flows.
 
 -- Enable equity trade data loading
-ALTER TASK EQTI_TASK_LOAD_TRADES RESUME;
+ALTER TASK EQTI_RAW_TASK_LOAD_TRADES RESUME;
 
 -- ============================================================
 -- SCHEMA COMPLETION STATUS
@@ -191,36 +191,36 @@ ALTER TASK EQTI_TASK_LOAD_TRADES RESUME;
 -- ✅ EQT_RAW_001 Schema Deployment Complete
 --
 -- OBJECTS CREATED:
--- • 1 Stage: EQTI_TRADES
+-- • 1 Stage: EQTI_RAW_TB_TRADES
 -- • 1 File Format: EQTI_FF_TRADES_CSV
--- • 1 Table: EQTI_TRADES
--- • 1 Stream: EQTI_STREAM_TRADES_FILES
--- • 1 Task: EQTI_TASK_LOAD_TRADES (ACTIVE)
+-- • 1 Table: EQTI_RAW_TB_TRADES
+-- • 1 Stream: EQTI_RAW_STREAM_TRADES_FILES
+-- • 1 Task: EQTI_RAW_TASK_LOAD_TRADES (ACTIVE)
 --
 -- NEXT STEPS:
 -- 1. ✅ EQT_RAW_001 schema deployed successfully
--- 2. Upload equity trade CSV files to EQTI_TRADES stage
+-- 2. Upload equity trade CSV files to EQTI_RAW_TB_TRADES stage
 -- 3. Monitor task execution: SHOW TASKS IN SCHEMA EQT_RAW_001;
--- 4. Verify data loading: SELECT COUNT(*) FROM EQTI_TRADES;
+-- 4. Verify data loading: SELECT COUNT(*) FROM EQTI_RAW_TB_TRADES;
 -- 5. Check for processing errors in task history
 -- 6. Proceed to deploy dependent schemas (FIII, CMDI)
 --
 -- USAGE EXAMPLES:
 -- -- Upload files
--- PUT file://trades.csv @EQTI_TRADES;
+-- PUT file://trades.csv @EQTI_RAW_TB_TRADES;
 -- 
 -- -- Check trade distribution
 -- SELECT SYMBOL, COUNT(*) as trade_count,
 --        SUM(BASE_GROSS_AMOUNT) as total_value_chf
--- FROM EQTI_TRADES 
+-- FROM EQTI_RAW_TB_TRADES 
 -- GROUP BY SYMBOL;
 --
 -- -- Monitor stream for new data
--- SELECT * FROM EQTI_STREAM_TRADES_FILES;
+-- SELECT * FROM EQTI_RAW_STREAM_TRADES_FILES;
 --
 -- -- Check task execution history
 -- SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())
--- WHERE NAME = 'EQTI_TASK_LOAD_TRADES'
+-- WHERE NAME = 'EQTI_RAW_TASK_LOAD_TRADES'
 -- ORDER BY SCHEDULED_TIME DESC;
 -- ============================================================
 -- EQT_RAW_001 Schema Setup Complete!

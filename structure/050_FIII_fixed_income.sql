@@ -17,22 +17,22 @@
 --
 -- OBJECTS CREATED:
 -- ┌─ STAGES (1):
--- │  └─ FIII_TRADES      - Fixed income trade files
+-- │  └─ FIII_RAW_TB_TRADES      - Fixed income trade files
 -- │
 -- ├─ FILE FORMATS (1):
 -- │  └─ FIII_FF_TRADES_CSV - Fixed income trade CSV format
 -- │
 -- ├─ TABLES (1):
--- │  └─ FIII_TRADES - Main table for all fixed income trades
+-- │  └─ FIII_RAW_TB_TRADES - Main table for all fixed income trades
 -- │
 -- ├─ STREAMS (1):
--- │  └─ FIII_TRADES_STREAM - Change data capture for incremental processing
+-- │  └─ FIII_RAW_TB_TRADES_STREAM - Change data capture for incremental processing
 -- │
 -- └─ TASKS (1):
 --    └─ FIII_LOAD_TRADES_TASK - Serverless task for automated CSV loading
 --
 -- DATA FLOW:
--- CSV Files → FIII_TRADES → FIII_TRADES → FIII_TRADES_STREAM → FII_AGG_001
+-- CSV Files → FIII_RAW_TB_TRADES → FIII_RAW_TB_TRADES → FIII_RAW_TB_TRADES_STREAM → FII_AGG_001
 --
 -- RELATED SCHEMAS:
 -- - FII_AGG_001: Aggregation layer for duration, DV01, and credit risk analytics
@@ -52,7 +52,7 @@ USE SCHEMA FII_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Fixed income trade data stage
-CREATE OR REPLACE STAGE FIII_TRADES
+CREATE OR REPLACE STAGE FIII_RAW_STAGE_TRADES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -85,11 +85,11 @@ CREATE OR REPLACE FILE FORMAT FIII_FF_TRADES_CSV
 -- ============================================================
 
 -- ============================================================
--- FIII_TRADES - Main Fixed Income Trades Table
+-- FIII_RAW_TB_TRADES - Main Fixed Income Trades Table
 -- ============================================================
 -- Stores all bond and interest rate swap trades with risk metrics
 
-CREATE OR REPLACE TABLE FIII_TRADES (
+CREATE OR REPLACE TABLE FIII_RAW_TB_TRADES (
     -- Trade Identification
     TRADE_DATE TIMESTAMP_NTZ COMMENT 'Trade execution timestamp',
     SETTLEMENT_DATE DATE COMMENT 'Settlement date for cash/securities transfer',
@@ -151,9 +151,9 @@ CREATE OR REPLACE TABLE FIII_TRADES (
 -- tracking for reliable data pipeline processing.
 
 -- Fixed income trade file detection stream
-CREATE OR REPLACE STREAM FIII_TRADES_STREAM
-    ON STAGE FIII_TRADES
-    COMMENT = 'Monitors FIII_TRADES stage for new fixed income trade CSV files. Triggers FIII_LOAD_TRADES_TASK when files matching *fixed_income_trades*.csv pattern are detected';
+CREATE OR REPLACE STREAM FIII_RAW_TB_TRADES_STREAM
+    ON STAGE FIII_RAW_STAGE_TRADES
+    COMMENT = 'Monitors FIII_RAW_STAGE_TRADES stage for new fixed income trade CSV files. Triggers FIII_LOAD_TRADES_TASK when files matching *fixed_income_trades*.csv pattern are detected';
 
 -- ============================================================
 -- AUTOMATED PROCESSING TASKS - Data Pipeline Orchestration
@@ -166,9 +166,9 @@ CREATE OR REPLACE STREAM FIII_TRADES_STREAM
 CREATE OR REPLACE TASK FIII_LOAD_TRADES_TASK
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('FIII_TRADES_STREAM')
+    WHEN SYSTEM$STREAM_HAS_DATA('FIII_RAW_TB_TRADES_STREAM')
 AS
-    COPY INTO FIII_TRADES (
+    COPY INTO FIII_RAW_TB_TRADES (
         TRADE_DATE, SETTLEMENT_DATE, TRADE_ID, CUSTOMER_ID, ACCOUNT_ID, ORDER_ID,
         INSTRUMENT_TYPE, INSTRUMENT_ID, ISSUER, ISSUER_TYPE, CURRENCY, SIDE,
         NOTIONAL, PRICE, ACCRUED_INTEREST, GROSS_AMOUNT, FIXED_RATE, FLOATING_RATE_INDEX, TENOR_YEARS,
@@ -176,7 +176,7 @@ AS
         COUPON_RATE, MATURITY_DATE, DURATION, DV01, CREDIT_RATING, CREDIT_SPREAD_BPS,
         MARKET, BROKER_ID, VENUE, LIQUIDITY_SCORE
     )
-    FROM @FIII_TRADES
+    FROM @FIII_RAW_STAGE_TRADES
     PATTERN = '.*fixed_income_trades.*\.csv'
     FILE_FORMAT = FIII_FF_TRADES_CSV
     ON_ERROR = CONTINUE;
@@ -195,23 +195,23 @@ ALTER TASK FIII_LOAD_TRADES_TASK RESUME;
 -- ============================================================
 --
 -- 1. Load CSV file manually:
---    PUT file://path/to/fixed_income_trades.csv @FIII_TRADES;
---    COPY INTO FIII_TRADES FROM @FIII_TRADES
+--    PUT file://path/to/fixed_income_trades.csv @FIII_RAW_TB_TRADES;
+--    COPY INTO FIII_RAW_TB_TRADES FROM @FIII_RAW_STAGE_TRADES
 --    FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1 FIELD_OPTIONALLY_ENCLOSED_BY = '"');
 --
 -- 2. Query recent trades:
---    SELECT * FROM FIII_TRADES 
+--    SELECT * FROM FIII_RAW_TB_TRADES 
 --    WHERE TRADE_DATE >= CURRENT_DATE - 30
 --    ORDER BY TRADE_DATE DESC;
 --
 -- 3. Check bonds vs swaps:
 --    SELECT INSTRUMENT_TYPE, COUNT(*) as trade_count, 
 --           SUM(BASE_GROSS_AMOUNT) as total_notional_chf
---    FROM FIII_TRADES
+--    FROM FIII_RAW_TB_TRADES
 --    GROUP BY INSTRUMENT_TYPE;
 --
 -- 4. Monitor stream for new data:
---    SELECT * FROM FIII_TRADES_STREAM;
+--    SELECT * FROM FIII_RAW_TB_TRADES_STREAM;
 --
 -- 5. Resume automated loading task:
 --    ALTER TASK FIII_LOAD_TRADES_TASK RESUME;
@@ -222,7 +222,7 @@ ALTER TASK FIII_LOAD_TRADES_TASK RESUME;
 --    ORDER BY SCHEDULED_TIME DESC;
 --
 -- 7. Query directory table to see loaded files:
---    SELECT * FROM DIRECTORY(@FIII_TRADES);
+--    SELECT * FROM DIRECTORY(@FIII_RAW_TB_TRADES);
 --
 -- 8. Check file metadata and load history:
 --    SELECT 
@@ -230,7 +230,7 @@ ALTER TASK FIII_LOAD_TRADES_TASK RESUME;
 --      SIZE,
 --      LAST_MODIFIED,
 --      MD5
---    FROM DIRECTORY(@FIII_TRADES)
+--    FROM DIRECTORY(@FIII_RAW_TB_TRADES)
 --    ORDER BY LAST_MODIFIED DESC;
 --
 -- ============================================================
@@ -239,39 +239,39 @@ ALTER TASK FIII_LOAD_TRADES_TASK RESUME;
 -- ✅ FII_RAW_001 Schema Deployment Complete
 --
 -- OBJECTS CREATED:
--- • 1 Stage: FIII_TRADES
+-- • 1 Stage: FIII_RAW_TB_TRADES
 -- • 1 File Format: FIII_FF_TRADES_CSV
--- • 1 Table: FIII_TRADES
--- • 1 Stream: FIII_TRADES_STREAM
+-- • 1 Table: FIII_RAW_TB_TRADES
+-- • 1 Stream: FIII_RAW_TB_TRADES_STREAM
 -- • 1 Task: FIII_LOAD_TRADES_TASK (ACTIVE)
 --
 -- NEXT STEPS:
 -- 1. ✅ FII_RAW_001 schema deployed successfully
--- 2. Upload fixed income trade CSV files to FIII_TRADES stage
+-- 2. Upload fixed income trade CSV files to FIII_RAW_TB_TRADES stage
 -- 3. Monitor task execution: SHOW TASKS IN SCHEMA FII_RAW_001;
--- 4. Verify data loading: SELECT COUNT(*) FROM FIII_TRADES;
+-- 4. Verify data loading: SELECT COUNT(*) FROM FIII_RAW_TB_TRADES;
 -- 5. Check for processing errors in task history
 -- 6. Deploy FII_AGG_001 schema for duration and DV01 analytics
 --
 -- USAGE EXAMPLES:
 -- -- Upload files
--- PUT file://fixed_income_trades.csv @FIII_TRADES;
+-- PUT file://fixed_income_trades.csv @FIII_RAW_TB_TRADES;
 -- 
 -- -- Check trade distribution by instrument type
 -- SELECT INSTRUMENT_TYPE, COUNT(*) as trade_count, 
 --        SUM(BASE_GROSS_AMOUNT) as total_notional_chf
--- FROM FIII_TRADES
+-- FROM FIII_RAW_TB_TRADES
 -- GROUP BY INSTRUMENT_TYPE;
 --
 -- -- Analyze FRTB risk metrics
 -- SELECT CREDIT_RATING, AVG(DURATION) as avg_duration, AVG(DV01) as avg_dv01
--- FROM FIII_TRADES
+-- FROM FIII_RAW_TB_TRADES
 -- WHERE CREDIT_RATING IS NOT NULL
 -- GROUP BY CREDIT_RATING
 -- ORDER BY CREDIT_RATING;
 --
 -- -- Monitor stream for new data
--- SELECT * FROM FIII_TRADES_STREAM;
+-- SELECT * FROM FIII_RAW_TB_TRADES_STREAM;
 --
 -- -- Check task execution history
 -- SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())

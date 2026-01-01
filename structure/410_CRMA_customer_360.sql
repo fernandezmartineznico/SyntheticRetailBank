@@ -18,11 +18,11 @@
 -- - Audit trails for customer service and compliance reviews
 --
 -- SCD TYPE 2 IMPLEMENTATION:
--- Both CRMI_CUSTOMER and CRMI_ADDRESSES use append-only structures where each
+-- Both CRMI_RAW_TB_CUSTOMER and CRMI_RAW_TB_ADDRESSES use append-only structures where each
 -- change creates a new record with INSERT_TIMESTAMP_UTC. Dynamic tables automatically
 -- convert these into proper SCD Type 2 with VALID_FROM/VALID_TO ranges.
--- - CRMI_CUSTOMER: Tracks changes to employment, account tier, contact info, risk profile
--- - CRMI_ADDRESSES: Tracks address changes for compliance and correspondence
+-- - CRMI_RAW_TB_CUSTOMER: Tracks changes to employment, account tier, contact info, risk profile
+-- - CRMI_RAW_TB_ADDRESSES: Tracks address changes for compliance and correspondence
 --
 -- OBJECTS CREATED:
 -- ┌─ DYNAMIC TABLES (5):
@@ -32,34 +32,52 @@
 -- │  ├─ CRMA_AGG_DT_CUSTOMER_HISTORY   - Full SCD Type 2 customer attribute history (analytical)
 -- │  └─ CRMA_AGG_DT_CUSTOMER_360       - Comprehensive 360° customer view with PEP/Sanctions matching
 -- │
+-- ├─ SHARED ANALYTICAL VIEWS (3):
+-- │  ├─ CRMA_AGG_VW_CUSTOMER_RISK_PROFILE  - Consolidated risk segmentation metrics (used by 6 notebooks)
+-- │  ├─ CRMA_AGG_VW_SCREENING_STATUS       - Combined PEP & sanctions screening status (used by 4 notebooks)
+-- │  └─ CRMA_AGG_VW_SCREENING_ALERTS       - Pre-filtered alerts requiring investigation (alert dashboards)
+-- │
 -- └─ REFRESH STRATEGY:
 --    ├─ TARGET_LAG: 1 hour (consistent with system schedule)
 --    ├─ WAREHOUSE: MD_TEST_WH
 --    └─ AUTO-REFRESH: Based on source table changes
 --
 -- DATA FLOW:
--- CRM_RAW_001.CRMI_ADDRESSES (append-only base)
+-- CRM_RAW_001.CRMI_RAW_TB_ADDRESSES (append-only base)
 --     ↓
 -- CRMA_AGG_DT_ADDRESSES_CURRENT (latest addresses)
 --     ↓
 -- CRMA_AGG_DT_ADDRESSES_HISTORY (full SCD Type 2)
 --
--- CRM_RAW_001.CRMI_CUSTOMER (append-only base with SCD Type 2)
+-- CRM_RAW_001.CRMI_RAW_TB_CUSTOMER (append-only base with SCD Type 2)
 --     ↓
 -- CRMA_AGG_DT_CUSTOMER_CURRENT (latest customer attributes)
 --     ↓
 -- CRMA_AGG_DT_CUSTOMER_HISTORY (full SCD Type 2)
+--
+-- PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS (transaction data - direct join for transaction metrics)
 --     ↓
--- CRMA_AGG_DT_CUSTOMER_360 (comprehensive 360° view with PEP/Sanctions matching)
+-- PAY_AGG_001.PAYA_AGG_DT_ACCOUNT_BALANCES (account balances)
+--     ↓
+-- CRMA_AGG_DT_CUSTOMER_360 (comprehensive 360° view with balances, transaction metrics, PEP/Sanctions matching)
 --
 -- SUPPORTED COUNTRIES:
 -- Norway, Netherlands, Sweden, Germany, France, Italy, United Kingdom,
 -- Denmark, Belgium, Austria, Switzerland (12 EMEA countries)
 --
--- RELATED SCHEMAS:
--- - CRM_RAW_001: Source customer and address master data
--- - PAY_RAW_001: Payment transactions (address for compliance)
--- - EQT_RAW_001: Equity trades (address for tax reporting)
+-- RELATED SCHEMAS & DEPENDENCIES:
+-- - CRM_RAW_001: Source customer and address master data (CRMI_RAW_TB_CUSTOMER, CRMI_RAW_TB_ADDRESSES, CRMI_RAW_TB_CUSTOMER_STATUS, CRMI_RAW_TB_EXPOSED_PERSON)
+-- - CRM_AGG_001: Account aggregation (ACCA_AGG_DT_ACCOUNTS - for account counts and types)
+-- - PAY_RAW_001: Payment transactions (PAYI_RAW_TB_TRANSACTIONS - direct join for transaction metrics)
+-- - PAY_AGG_001: Account balances (PAYA_AGG_DT_ACCOUNT_BALANCES)
+-- - External: Global Sanctions Data from Snowflake Data Exchange
+-- - EQT_RAW_001: Equity trades (for tax reporting)
+--
+-- DEPLOYMENT ORDER:
+-- 1. 030_PAYI_transactions.sql (raw transaction data)
+-- 2. 311_ACCA_accounts_agg.sql (creates ACCA_AGG_DT_ACCOUNTS - account aggregation layer)
+-- 3. 330_PAYA_anomaly_detection.sql (creates PAYA_AGG_DT_ACCOUNT_BALANCES)
+-- 4. 410_CRMA_customer_360.sql (this file - depends on account aggregation, balances, and transactions)
 -- ============================================================
 
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
@@ -112,7 +130,7 @@ FROM (
         COUNTRY,
         INSERT_TIMESTAMP_UTC,
         ROW_NUMBER() OVER (PARTITION BY CUSTOMER_ID ORDER BY INSERT_TIMESTAMP_UTC DESC) as rn
-    FROM CRM_RAW_001.CRMI_ADDRESSES
+    FROM CRM_RAW_001.CRMI_RAW_TB_ADDRESSES
 ) ranked
 WHERE rn = 1;
 
@@ -156,7 +174,7 @@ SELECT
         ELSE FALSE 
     END AS IS_CURRENT,
     INSERT_TIMESTAMP_UTC
-FROM CRM_RAW_001.CRMI_ADDRESSES
+FROM CRM_RAW_001.CRMI_RAW_TB_ADDRESSES
 ORDER BY CUSTOMER_ID, INSERT_TIMESTAMP_UTC;
 
 -- ============================================================
@@ -232,7 +250,7 @@ FROM (
         CREDIT_SCORE_BAND,
         INSERT_TIMESTAMP_UTC,
         ROW_NUMBER() OVER (PARTITION BY CUSTOMER_ID ORDER BY INSERT_TIMESTAMP_UTC DESC) as rn
-    FROM CRM_RAW_001.CRMI_CUSTOMER
+    FROM CRM_RAW_001.CRMI_RAW_TB_CUSTOMER
 ) ranked
 WHERE rn = 1;
 
@@ -300,7 +318,7 @@ SELECT
         ELSE FALSE 
     END AS IS_CURRENT,
     INSERT_TIMESTAMP_UTC
-FROM CRM_RAW_001.CRMI_CUSTOMER
+FROM CRM_RAW_001.CRMI_RAW_TB_CUSTOMER
 ORDER BY CUSTOMER_ID, INSERT_TIMESTAMP_UTC;
 
 -- ============================================================
@@ -311,6 +329,9 @@ ORDER BY CUSTOMER_ID, INSERT_TIMESTAMP_UTC;
 -- fuzzy matching with accuracy percentage scoring. Used for comprehensive customer 
 -- analysis, compliance screening, and risk assessment across all customer touchpoints 
 -- with quantified match confidence levels for both PEP and sanctions screening.
+
+-- Drop existing dynamic table first to ensure clean recreation after structural changes
+DROP DYNAMIC TABLE IF EXISTS CRMA_AGG_DT_CUSTOMER_360;
 
 CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_360(
     CUSTOMER_ID VARCHAR(30) COMMENT 'Unique customer identifier for relationship management',
@@ -346,6 +367,29 @@ CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_360(
     SAVINGS_ACCOUNTS NUMBER(10,0) COMMENT 'Number of savings accounts held',
     BUSINESS_ACCOUNTS NUMBER(10,0) COMMENT 'Number of business accounts held',
     INVESTMENT_ACCOUNTS NUMBER(10,0) COMMENT 'Number of investment accounts held',
+    
+    -- Balance Metrics (Phase 1 Enhancement - 2025-12-19)
+    TOTAL_BALANCE NUMBER(18,2) COMMENT 'Sum of all account balances in reporting currency for AUM tracking and advisor performance',
+    BALANCE_AS_OF_DATE DATE COMMENT 'Date when balance was calculated (most recent account update)',
+    CHECKING_BALANCE NUMBER(18,2) COMMENT 'Total balance in checking accounts',
+    SAVINGS_BALANCE NUMBER(18,2) COMMENT 'Total balance in savings accounts',
+    BUSINESS_BALANCE NUMBER(18,2) COMMENT 'Total balance in business accounts',
+    INVESTMENT_BALANCE NUMBER(18,2) COMMENT 'Total balance in investment accounts',
+    MAX_ACCOUNT_BALANCE NUMBER(18,2) COMMENT 'Largest account balance for key account identification',
+    MIN_ACCOUNT_BALANCE NUMBER(18,2) COMMENT 'Smallest account balance for minimum balance policy enforcement',
+    AVG_ACCOUNT_BALANCE NUMBER(18,2) COMMENT 'Average balance per account for relationship depth measurement',
+    
+    -- Transaction Activity Metrics (Phase 2 Enhancement - 2025-12-19)
+    TOTAL_TRANSACTIONS NUMBER(10,0) COMMENT 'Count of all transactions in last 12 months for engagement scoring and advisor performance',
+    TOTAL_TRANSACTIONS_ALL_TIME NUMBER(10,0) COMMENT 'Lifetime transaction count since onboarding for relationship maturity',
+    LAST_TRANSACTION_DATE DATE COMMENT 'Most recent transaction date for dormancy detection and churn prediction',
+    DAYS_SINCE_LAST_TRANSACTION NUMBER(10,0) COMMENT 'Days since last activity (churn indicator for proactive retention)',
+    DEBIT_TRANSACTIONS NUMBER(10,0) COMMENT 'Number of debit transactions for spending pattern analysis',
+    CREDIT_TRANSACTIONS NUMBER(10,0) COMMENT 'Number of credit transactions for income deposit tracking',
+    AVG_MONTHLY_TRANSACTIONS NUMBER(10,2) COMMENT 'Average transactions per month for engagement trend analysis',
+    IS_DORMANT_TRANSACTIONALLY BOOLEAN COMMENT 'TRUE if no transactions in 180+ days (fraud risk + churn risk)',
+    IS_HIGHLY_ACTIVE BOOLEAN COMMENT 'TRUE if >50 transactions in last month (high engagement)',
+    
     EXPOSED_PERSON_EXACT_MATCH_ID VARCHAR(50) COMMENT 'PEP ID for exact name match (compliance)',
     EXPOSED_PERSON_EXACT_MATCH_NAME VARCHAR(200) COMMENT 'PEP name for exact match (compliance)',
     EXPOSED_PERSON_EXACT_CATEGORY VARCHAR(50) COMMENT 'PEP category for exact match (DOMESTIC/FOREIGN/etc.)',
@@ -376,7 +420,7 @@ CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_360(
     REQUIRES_SANCTIONS_REVIEW BOOLEAN COMMENT 'Boolean flag indicating if customer requires sanctions compliance review',
     HIGH_RISK_CUSTOMER BOOLEAN COMMENT 'Boolean flag for customers with both anomalies and PEP/sanctions matches',
     LAST_UPDATED TIMESTAMP_NTZ COMMENT 'Timestamp when customer record was last updated'
-) COMMENT = 'Comprehensive 360-degree customer view with master data, current address, current status, account summary, Exposed Person fuzzy matching, and Global Sanctions Data fuzzy matching with accuracy scoring for compliance screening. Combines operational and compliance data for holistic customer risk assessment and regulatory reporting with both PEP and sanctions screening capabilities.'
+) COMMENT = 'Comprehensive 360-degree customer view with master data, current address, current status, account summary with balances (Phase 1), transaction activity metrics via direct cross-schema join (Phase 2 - Option A), Exposed Person fuzzy matching, and Global Sanctions Data fuzzy matching with accuracy scoring. Enables AUM tracking, advisor performance measurement, engagement scoring, churn prediction, and comprehensive compliance screening for holistic customer risk assessment and relationship management.'
 TARGET_LAG = '60 MINUTE' WAREHOUSE = MD_TEST_WH
 AS
 SELECT 
@@ -422,6 +466,51 @@ SELECT
     COUNT(CASE WHEN acc.ACCOUNT_TYPE = 'SAVINGS' THEN 1 END) AS SAVINGS_ACCOUNTS,
     COUNT(CASE WHEN acc.ACCOUNT_TYPE = 'BUSINESS' THEN 1 END) AS BUSINESS_ACCOUNTS,
     COUNT(CASE WHEN acc.ACCOUNT_TYPE = 'INVESTMENT' THEN 1 END) AS INVESTMENT_ACCOUNTS,
+    
+    -- Balance Metrics (Phase 1 Enhancement)
+    COALESCE(SUM(bal.CURRENT_BALANCE_BASE), 0) AS TOTAL_BALANCE,
+    MAX(bal.LAST_TRANSACTION_DATE) AS BALANCE_AS_OF_DATE,
+    COALESCE(SUM(CASE WHEN bal.ACCOUNT_TYPE = 'CHECKING' THEN bal.CURRENT_BALANCE_BASE ELSE 0 END), 0) AS CHECKING_BALANCE,
+    COALESCE(SUM(CASE WHEN bal.ACCOUNT_TYPE = 'SAVINGS' THEN bal.CURRENT_BALANCE_BASE ELSE 0 END), 0) AS SAVINGS_BALANCE,
+    COALESCE(SUM(CASE WHEN bal.ACCOUNT_TYPE = 'BUSINESS' THEN bal.CURRENT_BALANCE_BASE ELSE 0 END), 0) AS BUSINESS_BALANCE,
+    COALESCE(SUM(CASE WHEN bal.ACCOUNT_TYPE = 'INVESTMENT' THEN bal.CURRENT_BALANCE_BASE ELSE 0 END), 0) AS INVESTMENT_BALANCE,
+    COALESCE(MAX(bal.CURRENT_BALANCE_BASE), 0) AS MAX_ACCOUNT_BALANCE,
+    COALESCE(MIN(bal.CURRENT_BALANCE_BASE), 0) AS MIN_ACCOUNT_BALANCE,
+    COALESCE(AVG(bal.CURRENT_BALANCE_BASE), 0) AS AVG_ACCOUNT_BALANCE,
+    
+    -- Transaction Activity Metrics (Phase 2 Enhancement - Option A: Direct Cross-Schema Join)
+    COUNT(CASE 
+        WHEN txn.VALUE_DATE >= DATEADD(month, -12, CURRENT_DATE()) 
+        THEN txn.TRANSACTION_ID 
+    END) AS TOTAL_TRANSACTIONS,
+    COUNT(txn.TRANSACTION_ID) AS TOTAL_TRANSACTIONS_ALL_TIME,
+    MAX(txn.VALUE_DATE) AS LAST_TRANSACTION_DATE,
+    COALESCE(DATEDIFF(day, MAX(txn.VALUE_DATE), CURRENT_DATE()), 9999) AS DAYS_SINCE_LAST_TRANSACTION,
+    COUNT(CASE 
+        WHEN txn.AMOUNT < 0 AND txn.VALUE_DATE >= DATEADD(month, -12, CURRENT_DATE())
+        THEN txn.TRANSACTION_ID 
+    END) AS DEBIT_TRANSACTIONS,
+    COUNT(CASE 
+        WHEN txn.AMOUNT > 0 AND txn.VALUE_DATE >= DATEADD(month, -12, CURRENT_DATE())
+        THEN txn.TRANSACTION_ID 
+    END) AS CREDIT_TRANSACTIONS,
+    COUNT(CASE 
+        WHEN txn.VALUE_DATE >= DATEADD(month, -12, CURRENT_DATE()) 
+        THEN txn.TRANSACTION_ID 
+    END) / 12.0 AS AVG_MONTHLY_TRANSACTIONS,
+    CASE 
+        WHEN COALESCE(DATEDIFF(day, MAX(txn.VALUE_DATE), CURRENT_DATE()), 9999) >= 180 
+        THEN TRUE 
+        ELSE FALSE 
+    END AS IS_DORMANT_TRANSACTIONALLY,
+    CASE 
+        WHEN COUNT(CASE 
+            WHEN txn.VALUE_DATE >= DATEADD(month, -1, CURRENT_DATE()) 
+            THEN txn.TRANSACTION_ID 
+        END) > 50 
+        THEN TRUE 
+        ELSE FALSE 
+    END AS IS_HIGHLY_ACTIVE,
     
     -- PEP Compliance Fuzzy Matching
     -- Exact name match
@@ -610,23 +699,32 @@ LEFT JOIN (
         STATUS,
         STATUS_START_DATE,
         ROW_NUMBER() OVER (PARTITION BY CUSTOMER_ID ORDER BY STATUS_START_DATE DESC) AS rn
-    FROM CRM_RAW_001.CRMI_CUSTOMER_STATUS
+    FROM CRM_RAW_001.CRMI_RAW_TB_CUSTOMER_STATUS
     WHERE IS_CURRENT = TRUE
 ) status
     ON c.CUSTOMER_ID = status.CUSTOMER_ID
     AND status.rn = 1
 
--- Join accounts (aggregated)
-LEFT JOIN CRM_RAW_001.ACCI_ACCOUNTS acc
+-- Join accounts (aggregation layer) - for account type counts and metadata
+LEFT JOIN CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS acc
     ON c.CUSTOMER_ID = acc.CUSTOMER_ID
 
+-- Join account balances (Phase 1 Enhancement) - for balance metrics
+LEFT JOIN PAY_AGG_001.PAYA_AGG_DT_ACCOUNT_BALANCES bal
+    ON c.CUSTOMER_ID = bal.CUSTOMER_ID
+
+-- Join transactions (Phase 2 Enhancement - Option A: Direct Cross-Schema Join)
+-- Note: PAYI_RAW_TB_TRANSACTIONS has ACCOUNT_ID, not CUSTOMER_ID, so we join through accounts
+LEFT JOIN PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS txn
+    ON acc.ACCOUNT_ID = txn.ACCOUNT_ID
+
 -- Exact Exposed Person name matching
-LEFT JOIN CRM_RAW_001.CRMI_EXPOSED_PERSON pep_exact
+LEFT JOIN CRM_RAW_001.CRMI_RAW_TB_EXPOSED_PERSON pep_exact
     ON UPPER(CONCAT(c.FIRST_NAME, ' ', c.FAMILY_NAME)) = UPPER(pep_exact.FULL_NAME)
     AND pep_exact.STATUS = 'ACTIVE'
 
 -- Fuzzy Exposed Person name matching (similar names, different spellings)
-LEFT JOIN CRM_RAW_001.CRMI_EXPOSED_PERSON pep_fuzzy
+LEFT JOIN CRM_RAW_001.CRMI_RAW_TB_EXPOSED_PERSON pep_fuzzy
     ON pep_fuzzy.EXPOSED_PERSON_ID != COALESCE(pep_exact.EXPOSED_PERSON_ID, 'NO_EXACT_MATCH')  -- Avoid duplicate matches
     AND pep_fuzzy.STATUS = 'ACTIVE'
     AND (
@@ -648,10 +746,10 @@ LEFT JOIN CRM_RAW_001.CRMI_EXPOSED_PERSON pep_fuzzy
 
 -- Sanctions matching against Global Sanctions Data with fuzzy matching
 -- Using copy database to avoid external database limitations
-LEFT JOIN AAA_DEV_SYNTHETIC_BANK_REF_DAP_GLOBAL_SANCTIONS_DATA_SET_COPY.PUBLIC.SANCTIONS_DATA_STAGING sanctions_exact
+LEFT JOIN AAA_DEV_SYNTHETIC_BANK_REF_DAP_GLOBAL_SANCTIONS_DATA_SET_COPY.PUBLIC.SANCTIONS_TB_DATA_STAGING sanctions_exact
     ON UPPER(CONCAT(c.FIRST_NAME, ' ', c.FAMILY_NAME)) = UPPER(sanctions_exact.ENTITY_NAME)
 
-LEFT JOIN AAA_DEV_SYNTHETIC_BANK_REF_DAP_GLOBAL_SANCTIONS_DATA_SET_COPY.PUBLIC.SANCTIONS_DATA_STAGING sanctions_fuzzy
+LEFT JOIN AAA_DEV_SYNTHETIC_BANK_REF_DAP_GLOBAL_SANCTIONS_DATA_SET_COPY.PUBLIC.SANCTIONS_TB_DATA_STAGING sanctions_fuzzy
     ON sanctions_fuzzy.ENTITY_ID != COALESCE(sanctions_exact.ENTITY_ID, 'NO_EXACT_MATCH')
     AND EDITDISTANCE(UPPER(CONCAT(c.FIRST_NAME, ' ', c.FAMILY_NAME)), UPPER(sanctions_fuzzy.ENTITY_NAME)) <= 5
 
@@ -668,14 +766,334 @@ GROUP BY
 ORDER BY c.CUSTOMER_ID;
 
 -- ============================================================
+-- SHARED ANALYTICAL VIEWS (For Notebook Consolidation)
+-- ============================================================
+
+
+CREATE OR REPLACE VIEW CRMA_AGG_VW_CUSTOMER_RISK_PROFILE
+COMMENT = 'Consolidated customer risk segmentation - single source of truth for risk metrics across all notebooks. Provides population counts, risk breakdowns, PEP/sanctions metrics, and AUM distribution by risk level. Used by 6 notebooks.'
+AS
+SELECT 
+    -- Overall Population Metrics
+    COUNT(DISTINCT CUSTOMER_ID) as TOTAL_CUSTOMERS,
+    CURRENT_DATE() as AS_OF_DATE,
+    CURRENT_TIMESTAMP() as CALCULATION_TIMESTAMP,
+    
+    -- Risk Classification Breakdown (Counts)
+    COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'CRITICAL' THEN CUSTOMER_ID END) as CRITICAL_RISK_COUNT,
+    COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'HIGH' THEN CUSTOMER_ID END) as HIGH_RISK_COUNT,
+    COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'MEDIUM' THEN CUSTOMER_ID END) as MEDIUM_RISK_COUNT,
+    COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'LOW' THEN CUSTOMER_ID END) as LOW_RISK_COUNT,
+    
+    -- Risk Classification Percentages
+    ROUND(COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'CRITICAL' THEN CUSTOMER_ID END) * 100.0 / 
+          NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as CRITICAL_RISK_PCT,
+    ROUND(COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'HIGH' THEN CUSTOMER_ID END) * 100.0 / 
+          NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as HIGH_RISK_PCT,
+    ROUND(COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'MEDIUM' THEN CUSTOMER_ID END) * 100.0 / 
+          NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as MEDIUM_RISK_PCT,
+    ROUND(COUNT(DISTINCT CASE WHEN RISK_CLASSIFICATION = 'LOW' THEN CUSTOMER_ID END) * 100.0 / 
+          NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as LOW_RISK_PCT,
+    
+    -- PEP (Politically Exposed Person) Metrics
+    COUNT(DISTINCT CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') 
+        THEN CUSTOMER_ID 
+    END) as PEP_COUNT,
+    COUNT(DISTINCT CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'EXACT_MATCH' 
+        THEN CUSTOMER_ID 
+    END) as PEP_EXACT_MATCH_COUNT,
+    COUNT(DISTINCT CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' 
+        THEN CUSTOMER_ID 
+    END) as PEP_FUZZY_MATCH_COUNT,
+    ROUND(COUNT(DISTINCT CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') 
+        THEN CUSTOMER_ID 
+    END) * 100.0 / NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as PEP_PCT,
+    
+    -- Sanctions Screening Metrics
+    COUNT(DISTINCT CASE 
+        WHEN SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') 
+        THEN CUSTOMER_ID 
+    END) as SANCTIONS_COUNT,
+    COUNT(DISTINCT CASE 
+        WHEN SANCTIONS_MATCH_TYPE = 'EXACT_MATCH' 
+        THEN CUSTOMER_ID 
+    END) as SANCTIONS_EXACT_MATCH_COUNT,
+    COUNT(DISTINCT CASE 
+        WHEN SANCTIONS_MATCH_TYPE = 'FUZZY_MATCH' 
+        THEN CUSTOMER_ID 
+    END) as SANCTIONS_FUZZY_MATCH_COUNT,
+    ROUND(COUNT(DISTINCT CASE 
+        WHEN SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') 
+        THEN CUSTOMER_ID 
+    END) * 100.0 / NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as SANCTIONS_PCT,
+    
+    -- Transaction Anomaly Metrics
+    COUNT(DISTINCT CASE WHEN HAS_ANOMALY = TRUE THEN CUSTOMER_ID END) as ANOMALY_COUNT,
+    ROUND(COUNT(DISTINCT CASE WHEN HAS_ANOMALY = TRUE THEN CUSTOMER_ID END) * 100.0 / 
+          NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as ANOMALY_PCT,
+    
+    -- Combined High Risk (Any of: PEP, High/Critical Risk, Sanctions, Anomaly)
+    COUNT(DISTINCT CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            OR RISK_CLASSIFICATION IN ('CRITICAL', 'HIGH')
+            OR SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            OR HAS_ANOMALY = TRUE
+        THEN CUSTOMER_ID 
+    END) as COMBINED_HIGH_RISK_COUNT,
+    ROUND(COUNT(DISTINCT CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            OR RISK_CLASSIFICATION IN ('CRITICAL', 'HIGH')
+            OR SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            OR HAS_ANOMALY = TRUE
+        THEN CUSTOMER_ID 
+    END) * 100.0 / NULLIF(COUNT(DISTINCT CUSTOMER_ID), 0), 2) as COMBINED_HIGH_RISK_PCT,
+    
+    -- Multiple Risk Factor Analysis
+    COUNT(DISTINCT CASE 
+        WHEN (CASE WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') THEN 1 ELSE 0 END +
+              CASE WHEN RISK_CLASSIFICATION IN ('CRITICAL', 'HIGH') THEN 1 ELSE 0 END +
+              CASE WHEN SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') THEN 1 ELSE 0 END +
+              CASE WHEN HAS_ANOMALY = TRUE THEN 1 ELSE 0 END) >= 2
+        THEN CUSTOMER_ID 
+    END) as MULTIPLE_RISK_FACTORS_COUNT,
+    
+    -- Critical Combo: PEP + Sanctions
+    COUNT(DISTINCT CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            AND SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+        THEN CUSTOMER_ID 
+    END) as PEP_AND_SANCTIONS_COUNT,
+    
+    -- Dormant High Risk (High risk but no recent transactions)
+    COUNT(DISTINCT CASE 
+        WHEN (EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+              OR RISK_CLASSIFICATION IN ('CRITICAL', 'HIGH')
+              OR SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH'))
+            AND IS_DORMANT_TRANSACTIONALLY = TRUE
+        THEN CUSTOMER_ID 
+    END) as DORMANT_HIGH_RISK_COUNT,
+    
+    -- Active High Risk (High risk with recent transactions - heightened monitoring)
+    COUNT(DISTINCT CASE 
+        WHEN (EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+              OR RISK_CLASSIFICATION IN ('CRITICAL', 'HIGH')
+              OR SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH'))
+            AND IS_DORMANT_TRANSACTIONALLY = FALSE
+        THEN CUSTOMER_ID 
+    END) as ACTIVE_HIGH_RISK_COUNT,
+    
+    -- Risk Distribution by AUM (Balance-based segmentation)
+    SUM(CASE WHEN RISK_CLASSIFICATION = 'CRITICAL' THEN COALESCE(TOTAL_BALANCE, 0) ELSE 0 END) as CRITICAL_RISK_AUM,
+    SUM(CASE WHEN RISK_CLASSIFICATION = 'HIGH' THEN COALESCE(TOTAL_BALANCE, 0) ELSE 0 END) as HIGH_RISK_AUM,
+    SUM(CASE WHEN RISK_CLASSIFICATION = 'MEDIUM' THEN COALESCE(TOTAL_BALANCE, 0) ELSE 0 END) as MEDIUM_RISK_AUM,
+    SUM(CASE WHEN RISK_CLASSIFICATION = 'LOW' THEN COALESCE(TOTAL_BALANCE, 0) ELSE 0 END) as LOW_RISK_AUM,
+    
+    -- Total AUM at Risk
+    SUM(CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            OR RISK_CLASSIFICATION IN ('CRITICAL', 'HIGH')
+            OR SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+        THEN COALESCE(TOTAL_BALANCE, 0) 
+        ELSE 0 
+    END) as TOTAL_HIGH_RISK_AUM
+    
+FROM CRMA_AGG_DT_CUSTOMER_360;
+
+
+CREATE OR REPLACE VIEW CRMA_AGG_VW_SCREENING_STATUS
+COMMENT = 'Combined PEP and sanctions screening status for all customers. Provides detailed match information, risk tiers, SLA tracking, and investigation requirements. Single source of truth for compliance screening across all notebooks. Used by 4 notebooks.'
+AS
+SELECT 
+    -- Customer Identity
+    CUSTOMER_ID,
+    FIRST_NAME,
+    FAMILY_NAME,
+    FIRST_NAME || ' ' || FAMILY_NAME as FULL_NAME,
+    DATE_OF_BIRTH,
+    COUNTRY,
+    ONBOARDING_DATE,
+    CURRENT_STATUS,
+    
+    -- PEP Screening Status
+    EXPOSED_PERSON_MATCH_TYPE as PEP_MATCH_TYPE,
+    CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') THEN TRUE
+        ELSE FALSE
+    END as IS_PEP,
+    
+    -- PEP Match Details
+    COALESCE(EXPOSED_PERSON_EXACT_MATCH_NAME, EXPOSED_PERSON_FUZZY_MATCH_NAME) as PEP_MATCH_NAME,
+    COALESCE(EXPOSED_PERSON_EXACT_CATEGORY, EXPOSED_PERSON_FUZZY_CATEGORY) as PEP_CATEGORY,
+    COALESCE(EXPOSED_PERSON_EXACT_RISK_LEVEL, EXPOSED_PERSON_FUZZY_RISK_LEVEL) as PEP_RISK_LEVEL,
+    EXPOSED_PERSON_MATCH_ACCURACY_PERCENT as PEP_MATCH_ACCURACY,
+    
+    -- PEP Match Confidence Level
+    CASE 
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'EXACT_MATCH' THEN 'HIGH'
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' AND EXPOSED_PERSON_MATCH_ACCURACY_PERCENT >= 90 THEN 'MEDIUM_HIGH'
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' AND EXPOSED_PERSON_MATCH_ACCURACY_PERCENT >= 80 THEN 'MEDIUM'
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' THEN 'LOW_MEDIUM'
+        ELSE 'NONE'
+    END as PEP_MATCH_CONFIDENCE,
+    
+    -- Sanctions Screening Status
+    SANCTIONS_MATCH_TYPE,
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') THEN TRUE
+        ELSE FALSE
+    END as HAS_SANCTIONS_HIT,
+    
+    -- Sanctions Match Details
+    COALESCE(SANCTIONS_EXACT_MATCH_NAME, SANCTIONS_FUZZY_MATCH_NAME) as SANCTIONS_MATCH_NAME,
+    COALESCE(SANCTIONS_EXACT_MATCH_TYPE, SANCTIONS_FUZZY_MATCH_TYPE) as SANCTIONS_ENTITY_TYPE,
+    COALESCE(SANCTIONS_EXACT_MATCH_COUNTRY, SANCTIONS_FUZZY_MATCH_COUNTRY) as SANCTIONS_COUNTRY,
+    SANCTIONS_MATCH_ACCURACY_PERCENT as SANCTIONS_MATCH_ACCURACY,
+    
+    -- Sanctions Match Confidence Level
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE = 'EXACT_MATCH' THEN 'HIGH'
+        WHEN SANCTIONS_MATCH_TYPE = 'FUZZY_MATCH' AND SANCTIONS_MATCH_ACCURACY_PERCENT >= 90 THEN 'MEDIUM_HIGH'
+        WHEN SANCTIONS_MATCH_TYPE = 'FUZZY_MATCH' AND SANCTIONS_MATCH_ACCURACY_PERCENT >= 80 THEN 'MEDIUM'
+        WHEN SANCTIONS_MATCH_TYPE = 'FUZZY_MATCH' THEN 'LOW_MEDIUM'
+        ELSE 'NONE'
+    END as SANCTIONS_MATCH_CONFIDENCE,
+    
+    -- Overall Screening Risk Assessment
+    OVERALL_EXPOSED_PERSON_RISK,
+    OVERALL_SANCTIONS_RISK,
+    OVERALL_RISK_RATING,
+    OVERALL_RISK_SCORE,
+    
+    -- Combined Screening Risk Tier
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE = 'EXACT_MATCH' THEN 'SANCTIONS_EXACT_CRITICAL'
+        WHEN SANCTIONS_MATCH_TYPE = 'FUZZY_MATCH' THEN 'SANCTIONS_FUZZY_HIGH'
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'EXACT_MATCH' AND COALESCE(EXPOSED_PERSON_EXACT_RISK_LEVEL, 'LOW') IN ('CRITICAL', 'HIGH') THEN 'PEP_EXACT_HIGH'
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' AND COALESCE(EXPOSED_PERSON_FUZZY_RISK_LEVEL, 'LOW') IN ('CRITICAL', 'HIGH') THEN 'PEP_FUZZY_HIGH'
+        WHEN EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') THEN 'PEP_MEDIUM'
+        WHEN RISK_CLASSIFICATION = 'CRITICAL' THEN 'HIGH_RISK_NO_MATCH'
+        WHEN RISK_CLASSIFICATION = 'HIGH' THEN 'MEDIUM_RISK_NO_MATCH'
+        ELSE 'LOW_RISK'
+    END as SCREENING_RISK_TIER,
+    
+    -- Action Required Flags
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH') THEN 'IMMEDIATE_BLOCK'
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'EXACT_MATCH' THEN 'ENHANCED_DUE_DILIGENCE'
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' THEN 'VERIFY_AND_INVESTIGATE'
+        WHEN RISK_CLASSIFICATION = 'CRITICAL' THEN 'ENHANCED_MONITORING'
+        WHEN RISK_CLASSIFICATION = 'HIGH' THEN 'STANDARD_MONITORING'
+        ELSE 'ROUTINE'
+    END as REQUIRED_ACTION,
+    
+    REQUIRES_EXPOSED_PERSON_REVIEW as REQUIRES_PEP_REVIEW,
+    REQUIRES_SANCTIONS_REVIEW,
+    
+    -- Investigation requires both PEP/Sanctions review
+    CASE 
+        WHEN REQUIRES_EXPOSED_PERSON_REVIEW = TRUE OR REQUIRES_SANCTIONS_REVIEW = TRUE 
+        THEN TRUE 
+        ELSE FALSE 
+    END as REQUIRES_INVESTIGATION,
+    
+    -- SLA Policy for Investigation (days)
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE = 'EXACT_MATCH' THEN 1  -- Immediate (same day)
+        WHEN SANCTIONS_MATCH_TYPE = 'FUZZY_MATCH' THEN 3  -- 3 business days
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'EXACT_MATCH' THEN 7  -- 1 week
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' THEN 14  -- 2 weeks
+        WHEN RISK_CLASSIFICATION = 'CRITICAL' THEN 7
+        WHEN RISK_CLASSIFICATION = 'HIGH' THEN 30
+        ELSE 90
+    END as INVESTIGATION_SLA_DAYS,
+    
+    -- Alert Age (using onboarding_date as proxy for screening date)
+    DATEDIFF(day, ONBOARDING_DATE, CURRENT_DATE()) as DAYS_SINCE_SCREENING,
+    
+    -- SLA Breach Flag
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE = 'EXACT_MATCH' 
+            AND DATEDIFF(day, ONBOARDING_DATE, CURRENT_DATE()) > 1 
+        THEN TRUE
+        WHEN SANCTIONS_MATCH_TYPE = 'FUZZY_MATCH' 
+            AND DATEDIFF(day, ONBOARDING_DATE, CURRENT_DATE()) > 3 
+        THEN TRUE
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'EXACT_MATCH' 
+            AND DATEDIFF(day, ONBOARDING_DATE, CURRENT_DATE()) > 7 
+        THEN TRUE
+        WHEN EXPOSED_PERSON_MATCH_TYPE = 'FUZZY_MATCH' 
+            AND DATEDIFF(day, ONBOARDING_DATE, CURRENT_DATE()) > 14 
+        THEN TRUE
+        ELSE FALSE
+    END as IS_SLA_BREACH,
+    
+    -- Risk Context
+    RISK_CLASSIFICATION,
+    HAS_ANOMALY as HAS_TRANSACTION_ANOMALY,
+    HIGH_RISK_CUSTOMER,
+    
+    -- Combined Risk Flags (for filtering)
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            OR EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            OR RISK_CLASSIFICATION IN ('CRITICAL', 'HIGH')
+        THEN TRUE
+        ELSE FALSE
+    END as IS_HIGH_RISK,
+    
+    -- Multiple Screening Hits
+    CASE 
+        WHEN SANCTIONS_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+            AND EXPOSED_PERSON_MATCH_TYPE IN ('EXACT_MATCH', 'FUZZY_MATCH')
+        THEN TRUE
+        ELSE FALSE
+    END as HAS_MULTIPLE_SCREENING_HITS,
+    
+    -- Financial Context
+    TOTAL_BALANCE as ACCOUNT_BALANCE,
+    TOTAL_ACCOUNTS,
+    TOTAL_TRANSACTIONS,
+    IS_DORMANT_TRANSACTIONALLY,
+    
+    -- Timestamp
+    LAST_UPDATED as SCREENING_LAST_UPDATED,
+    CURRENT_TIMESTAMP() as AS_OF_TIMESTAMP
+    
+FROM CRMA_AGG_DT_CUSTOMER_360;
+
+CREATE OR REPLACE VIEW CRMA_AGG_VW_SCREENING_ALERTS
+COMMENT = 'Filtered view showing only customers with PEP or sanctions hits requiring investigation. Pre-prioritized by action urgency and SLA breach status. Used for alert dashboards and case management.'
+AS
+SELECT * 
+FROM CRMA_AGG_VW_SCREENING_STATUS
+WHERE REQUIRES_INVESTIGATION = TRUE
+ORDER BY 
+    CASE REQUIRED_ACTION
+        WHEN 'IMMEDIATE_BLOCK' THEN 1
+        WHEN 'ENHANCED_DUE_DILIGENCE' THEN 2
+        WHEN 'VERIFY_AND_INVESTIGATE' THEN 3
+        WHEN 'ENHANCED_MONITORING' THEN 4
+        ELSE 5
+    END,
+    IS_SLA_BREACH DESC,
+    DAYS_SINCE_SCREENING DESC;
+
+-- ============================================================
 -- CRM_AGG_001 Schema Setup Complete!
 -- ============================================================
 --
 -- DYNAMIC TABLE REFRESH STATUS:
--- All three dynamic tables will automatically refresh based on changes to the
+-- All dynamic tables will automatically refresh based on changes to the
 -- source tables with a 1-hour target lag. The 360° view depends on multiple
--- source tables: CRMI_CUSTOMER, CRMI_ADDRESSES, CRMI_CUSTOMER_STATUS, ACCI_ACCOUNTS, 
--- CRMI_EXPOSED_PERSON, and Global Sanctions Data from Snowflake Data Exchange with 
+-- source tables: CRMI_RAW_TB_CUSTOMER, CRMI_RAW_TB_ADDRESSES, CRMI_RAW_TB_CUSTOMER_STATUS,
+-- ACCA_AGG_DT_ACCOUNTS (for account type counts),
+-- PAYA_AGG_DT_ACCOUNT_BALANCES (for balance metrics),
+-- PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY (for transaction metrics - if used),
+-- CRMI_RAW_TB_EXPOSED_PERSON, and Global Sanctions Data from Snowflake Data Exchange with 
 -- comprehensive fuzzy matching.
 --
 -- USAGE EXAMPLES:
@@ -815,6 +1233,8 @@ ORDER BY c.CUSTOMER_ID;
 --
 -- RELATED SCHEMAS:
 -- - CRM_RAW_001: Source customer and address master data
--- - PAY_RAW_001: Payment transactions (join on CUSTOMER_ID)
+-- - CRM_AGG_001: Account aggregation (ACCA_AGG_DT_ACCOUNTS for account metadata)
+-- - PAY_RAW_001: Payment transactions (source for balances and activity - direct join for transaction metrics)
+-- - PAY_AGG_001: Account balances (PAYA_AGG_DT_ACCOUNT_BALANCES) and transaction summary (PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY - alternative to direct join)
 -- - EQT_RAW_001: Equity trades (join on CUSTOMER_ID)
 -- ============================================================

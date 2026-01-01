@@ -19,19 +19,19 @@
 --
 -- OBJECTS CREATED:
 -- ┌─ STAGES (1):
--- │  └─ PAYI_TRANSACTIONS      - Payment transaction files
+-- │  └─ PAYI_RAW_TB_TRANSACTIONS      - Payment transaction files
 -- │
 -- ├─ FILE FORMATS (1):
 -- │  └─ PAYI_FF_TRANSACTION_CSV - Payment transaction CSV format
 -- │
 -- ├─ TABLES (1):
--- │  └─ PAYI_TRANSACTIONS - Payment transactions with multi-currency support
+-- │  └─ PAYI_RAW_TB_TRANSACTIONS - Payment transactions with multi-currency support
 -- │
 -- ├─ STREAMS (1):
--- │  └─ PAYI_STREAM_TRANSACTION_FILES - Detects new transaction files
+-- │  └─ PAYI_RAW_STREAM_TRANSACTION_FILES - Detects new transaction files
 -- │
 -- └─ TASKS (1):
---    └─ PAYI_TASK_LOAD_TRANSACTIONS - Automated transaction loading
+--    └─ PAYI_RAW_TASK_LOAD_TRANSACTIONS - Automated transaction loading
 --
 -- DATA ARCHITECTURE:
 -- File Upload → Stage → Stream Detection → Task Processing → Table
@@ -58,7 +58,7 @@ USE SCHEMA PAY_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Payment transaction data stage
-CREATE OR REPLACE STAGE PAYI_TRANSACTIONS
+CREATE OR REPLACE STAGE PAYI_RAW_STAGE_TRANSACTIONS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -91,16 +91,16 @@ CREATE OR REPLACE FILE FORMAT PAYI_FF_TRANSACTION_CSV
 -- ============================================================
 
 -- ============================================================
--- PAYI_TRANSACTIONS - Payment Transactions with Multi-Currency Support
+-- PAYI_RAW_TB_TRANSACTIONS - Payment Transactions with Multi-Currency Support
 -- ============================================================
 -- Payment transaction data with FX conversions and settlement dates
 -- for retail banking operations and compliance monitoring
 
-CREATE OR REPLACE TABLE PAYI_TRANSACTIONS (
+CREATE OR REPLACE TABLE PAYI_RAW_TB_TRANSACTIONS (
     BOOKING_DATE TIMESTAMP_NTZ NOT NULL COMMENT 'Transaction timestamp when recorded (ISO 8601 UTC format: YYYY-MM-DDTHH:MM:SS.fffffZ)',
     VALUE_DATE DATE NOT NULL COMMENT 'Date when funds are settled/available (YYYY-MM-DD)',
     TRANSACTION_ID VARCHAR(50) NOT NULL COMMENT 'Unique transaction identifier',
-    ACCOUNT_ID VARCHAR(30) NOT NULL COMMENT 'Reference to account ID in ACCI_ACCOUNTS',
+    ACCOUNT_ID VARCHAR(30) NOT NULL COMMENT 'Reference to account ID in ACCI_RAW_TB_ACCOUNTS',
     AMOUNT DECIMAL(15,2) NOT NULL WITH TAG (SENSITIVITY_LEVEL='restricted') COMMENT 'Signed transaction amount in original currency (positive = incoming, negative = outgoing)',
     CURRENCY VARCHAR(3) NOT NULL COMMENT 'Transaction currency (USD, EUR, GBP, JPY, CAD, CHF)',
     BASE_AMOUNT DECIMAL(15,2) NOT NULL WITH TAG (SENSITIVITY_LEVEL='restricted') COMMENT 'Signed transaction amount converted to base currency USD (positive = incoming, negative = outgoing)',
@@ -118,8 +118,8 @@ CREATE OR REPLACE TABLE PAYI_TRANSACTIONS (
     CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
 
     -- Constraints
-    CONSTRAINT PK_PAYI_TRANSACTIONS PRIMARY KEY (TRANSACTION_ID),
-    CONSTRAINT FK_PAYI_TRANSACTIONS_ACCOUNT FOREIGN KEY (ACCOUNT_ID) REFERENCES AAA_DEV_SYNTHETIC_BANK.CRM_RAW_001.ACCI_ACCOUNTS (ACCOUNT_ID)
+    CONSTRAINT PK_PAYI_RAW_TB_TRANSACTIONS PRIMARY KEY (TRANSACTION_ID),
+    CONSTRAINT FK_PAYI_RAW_TB_TRANSACTIONS_ACCOUNT FOREIGN KEY (ACCOUNT_ID) REFERENCES AAA_DEV_SYNTHETIC_BANK.CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS (ACCOUNT_ID)
     -- CHECK constraints not supported in Snowflake - replaced with comments for documentation
     -- CHK_CURRENCY_TXN: CURRENCY should be in ('USD', 'EUR', 'GBP', 'JPY', 'CAD', 'CHF')
     -- CHK_BASE_CURRENCY_TXN: BASE_CURRENCY should be 'USD'
@@ -137,9 +137,9 @@ COMMENT = 'Payment transactions with multi-currency support and anomaly detectio
 -- tracking for reliable data pipeline processing.
 
 -- Payment transaction file detection stream
-CREATE OR REPLACE STREAM PAYI_STREAM_TRANSACTION_FILES
-    ON STAGE PAYI_TRANSACTIONS
-    COMMENT = 'Monitors PAYI_TRANSACTIONS stage for new payment transaction CSV files. Triggers PAYI_TASK_LOAD_TRANSACTIONS when files matching *pay_transactions*.csv pattern are detected';
+CREATE OR REPLACE STREAM PAYI_RAW_STREAM_TRANSACTION_FILES
+    ON STAGE PAYI_RAW_STAGE_TRANSACTIONS
+    COMMENT = 'Monitors PAYI_RAW_STAGE_TRANSACTIONS stage for new payment transaction CSV files. Triggers PAYI_RAW_TASK_LOAD_TRANSACTIONS when files matching *pay_transactions*.csv pattern are detected';
 
 -- ============================================================
 -- AUTOMATED PROCESSING TASKS - Data Pipeline Orchestration
@@ -149,13 +149,13 @@ CREATE OR REPLACE STREAM PAYI_STREAM_TRANSACTION_FILES
 -- usage. Error handling continues processing despite individual record failures.
 
 -- Payment transaction loading task
-CREATE OR REPLACE TASK PAYI_TASK_LOAD_TRANSACTIONS
+CREATE OR REPLACE TASK PAYI_RAW_TASK_LOAD_TRANSACTIONS
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('PAYI_STREAM_TRANSACTION_FILES')
+    WHEN SYSTEM$STREAM_HAS_DATA('PAYI_RAW_STREAM_TRANSACTION_FILES')
 AS
-    COPY INTO PAYI_TRANSACTIONS (BOOKING_DATE, VALUE_DATE, TRANSACTION_ID, ACCOUNT_ID, AMOUNT, CURRENCY, BASE_AMOUNT, BASE_CURRENCY, FX_RATE, COUNTERPARTY_ACCOUNT, DESCRIPTION)
-    FROM @PAYI_TRANSACTIONS
+    COPY INTO PAYI_RAW_TB_TRANSACTIONS (BOOKING_DATE, VALUE_DATE, TRANSACTION_ID, ACCOUNT_ID, AMOUNT, CURRENCY, BASE_AMOUNT, BASE_CURRENCY, FX_RATE, COUNTERPARTY_ACCOUNT, DESCRIPTION)
+    FROM @PAYI_RAW_STAGE_TRANSACTIONS
     PATTERN = '.*pay_transactions.*\.csv'
     FILE_FORMAT = PAYI_FF_TRANSACTION_CSV
     ON_ERROR = CONTINUE;
@@ -167,7 +167,7 @@ AS
 -- controlled deployment and testing before enabling automated data flows.
 
 -- Enable payment transaction data loading
-ALTER TASK PAYI_TASK_LOAD_TRANSACTIONS RESUME;
+ALTER TASK PAYI_RAW_TASK_LOAD_TRANSACTIONS RESUME;
 
 -- ============================================================
 -- SCHEMA COMPLETION STATUS
@@ -175,36 +175,36 @@ ALTER TASK PAYI_TASK_LOAD_TRANSACTIONS RESUME;
 -- ✅ PAY_RAW_001 Schema Deployment Complete
 --
 -- OBJECTS CREATED:
--- • 1 Stage: PAYI_TRANSACTIONS
+-- • 1 Stage: PAYI_RAW_TB_TRANSACTIONS
 -- • 1 File Format: PAYI_FF_TRANSACTION_CSV
--- • 1 Table: PAYI_TRANSACTIONS
--- • 1 Stream: PAYI_STREAM_TRANSACTION_FILES
--- • 1 Task: PAYI_TASK_LOAD_TRANSACTIONS (ACTIVE)
+-- • 1 Table: PAYI_RAW_TB_TRANSACTIONS
+-- • 1 Stream: PAYI_RAW_STREAM_TRANSACTION_FILES
+-- • 1 Task: PAYI_RAW_TASK_LOAD_TRANSACTIONS (ACTIVE)
 --
 -- NEXT STEPS:
 -- 1. ✅ PAY_RAW_001 schema deployed successfully
--- 2. Upload payment transaction CSV files to PAYI_TRANSACTIONS stage
+-- 2. Upload payment transaction CSV files to PAYI_RAW_TB_TRANSACTIONS stage
 -- 3. Monitor task execution: SHOW TASKS IN SCHEMA PAY_RAW_001;
--- 4. Verify data loading: SELECT COUNT(*) FROM PAYI_TRANSACTIONS;
+-- 4. Verify data loading: SELECT COUNT(*) FROM PAYI_RAW_TB_TRANSACTIONS;
 -- 5. Check for processing errors in task history
 -- 6. Proceed to deploy dependent schemas (EQTI, FIII, CMDI)
 --
 -- USAGE EXAMPLES:
 -- -- Upload files
--- PUT file://pay_transactions.csv @PAYI_TRANSACTIONS;
+-- PUT file://pay_transactions.csv @PAYI_RAW_TB_TRANSACTIONS;
 -- 
 -- -- Check transaction distribution
 -- SELECT CURRENCY, COUNT(*) as transaction_count,
 --        SUM(BASE_AMOUNT) as total_amount_chf
--- FROM PAYI_TRANSACTIONS 
+-- FROM PAYI_RAW_TB_TRANSACTIONS 
 -- GROUP BY CURRENCY;
 --
 -- -- Monitor stream for new data
--- SELECT * FROM PAYI_STREAM_TRANSACTION_FILES;
+-- SELECT * FROM PAYI_RAW_STREAM_TRANSACTION_FILES;
 --
 -- -- Check task execution history
 -- SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())
--- WHERE NAME = 'PAYI_TASK_LOAD_TRANSACTIONS'
+-- WHERE NAME = 'PAYI_RAW_TASK_LOAD_TRANSACTIONS'
 -- ORDER BY SCHEDULED_TIME DESC;
 -- ============================================================
 -- PAY_RAW_001 Schema Setup Complete!

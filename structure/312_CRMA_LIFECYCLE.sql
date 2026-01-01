@@ -16,10 +16,10 @@
 -- - Dormancy detection and monitoring
 --
 -- DATA SOURCES:
--- - CRM_RAW_001.CRMI_CUSTOMER: Customer master data
--- - CRM_RAW_001.CRMI_CUSTOMER_STATUS: Status history (SCD Type 2)
--- - CRM_RAW_001.CRMI_CUSTOMER_EVENT: Lifecycle events log
--- - PAY_RAW_001.PAYI_TRANSACTIONS: Transaction activity for dormancy analysis
+-- - CRM_RAW_001.CRMI_RAW_TB_CUSTOMER: Customer master data
+-- - CRM_RAW_001.CRMI_RAW_TB_CUSTOMER_STATUS: Status history (SCD Type 2)
+-- - CRM_RAW_001.CRMI_RAW_TB_CUSTOMER_EVENT: Lifecycle events log
+-- - PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS: Transaction activity for dormancy analysis
 --
 -- OBJECTS CREATED:
 -- ┌─ DYNAMIC TABLES (1):
@@ -149,23 +149,23 @@ SELECT
     
     CURRENT_TIMESTAMP() AS LAST_UPDATED
 
-FROM CRM_RAW_001.CRMI_CUSTOMER c
+FROM CRM_RAW_001.CRMI_RAW_TB_CUSTOMER c
 
 -- Join current status
-LEFT JOIN CRM_RAW_001.CRMI_CUSTOMER_STATUS s
+LEFT JOIN CRM_RAW_001.CRMI_RAW_TB_CUSTOMER_STATUS s
     ON c.CUSTOMER_ID = s.CUSTOMER_ID
     AND s.IS_CURRENT = TRUE
 
 -- Join lifecycle events
-LEFT JOIN CRM_RAW_001.CRMI_CUSTOMER_EVENT e
+LEFT JOIN CRM_RAW_001.CRMI_RAW_TB_CUSTOMER_EVENT e
     ON c.CUSTOMER_ID = e.CUSTOMER_ID
 
 -- Join accounts to connect customer to transactions
-LEFT JOIN CRM_RAW_001.ACCI_ACCOUNTS a
+LEFT JOIN CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS a
     ON c.CUSTOMER_ID = a.CUSTOMER_ID
 
 -- Join transaction data for activity analysis
-LEFT JOIN PAY_RAW_001.PAYI_TRANSACTIONS t
+LEFT JOIN PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS t
     ON a.ACCOUNT_ID = t.ACCOUNT_ID
 
 GROUP BY 
@@ -180,8 +180,8 @@ ORDER BY c.CUSTOMER_ID;
 --
 -- DYNAMIC TABLE REFRESH STATUS:
 -- The lifecycle dynamic table will automatically refresh based on changes to
--- source tables (CRMI_CUSTOMER, CRMI_CUSTOMER_STATUS, CRMI_CUSTOMER_EVENT,
--- PAYI_TRANSACTIONS) with a 1-hour target lag.
+-- source tables (CRMI_RAW_TB_CUSTOMER, CRMI_RAW_TB_CUSTOMER_STATUS, CRMI_RAW_TB_CUSTOMER_EVENT,
+-- PAYI_RAW_TB_TRANSACTIONS) with a 1-hour target lag.
 --
 -- USAGE EXAMPLES:
 --

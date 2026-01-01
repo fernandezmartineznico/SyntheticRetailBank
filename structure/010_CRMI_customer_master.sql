@@ -23,10 +23,10 @@
 --
 -- OBJECTS CREATED:
 -- ┌─ STAGES (4):
--- │  ├─ CRMI_CUSTOMERS        - Customer master data files
--- │  ├─ CRMI_ADDRESSES        - Customer address files (SCD Type 2)
--- │  ├─ CRMI_EXPOSED_PERSON   - Politically Exposed Persons files
--- │  └─ CRMI_CUSTOMER_EVENTS  - Lifecycle events and status files
+-- │  ├─ CRMI_RAW_STAGE_CUSTOMERS        - Customer master data files
+-- │  ├─ CRMI_RAW_TB_ADDRESSES        - Customer address files (SCD Type 2)
+-- │  ├─ CRMI_RAW_TB_EXPOSED_PERSON   - Politically Exposed Persons files
+-- │  └─ CRMI_RAW_STAGE_CUSTOMER_EVENTS  - Lifecycle events and status files
 -- │
 -- ┌─ FILE FORMATS (5):
 -- │  ├─ CRMI_FF_CUSTOMER_CSV         - Customer CSV format
@@ -36,25 +36,25 @@
 -- │  └─ CRMI_FF_CUSTOMER_STATUS_CSV  - Status history CSV format
 -- │
 -- ┌─ TABLES (5):
--- │  ├─ CRMI_CUSTOMER         - Customer master data (normalized)
--- │  ├─ CRMI_ADDRESSES        - Address base table (append-only)
--- │  ├─ CRMI_EXPOSED_PERSON   - PEP compliance data
--- │  ├─ CRMI_CUSTOMER_EVENT   - Lifecycle event log (8 event types)
--- │  └─ CRMI_CUSTOMER_STATUS  - Status history (SCD Type 2)
+-- │  ├─ CRMI_RAW_TB_CUSTOMER         - Customer master data (normalized)
+-- │  ├─ CRMI_RAW_TB_ADDRESSES        - Address base table (append-only)
+-- │  ├─ CRMI_RAW_TB_EXPOSED_PERSON   - PEP compliance data
+-- │  ├─ CRMI_RAW_TB_CUSTOMER_EVENT   - Lifecycle event log (8 event types)
+-- │  └─ CRMI_RAW_TB_CUSTOMER_STATUS  - Status history (SCD Type 2)
 -- │
 -- ┌─ STREAMS (5):
--- │  ├─ CRMI_STREAM_CUSTOMER_FILES        - Detects new customer files
--- │  ├─ CRMI_STREAM_ADDRESS_FILES         - Detects new address files
--- │  ├─ CRMI_STREAM_EXPOSED_PERSON_FILES  - Detects new PEP files
--- │  ├─ CRMI_STREAM_CUSTOMER_EVENT_FILES  - Detects new event files
--- │  └─ CRMI_STREAM_CUSTOMER_STATUS_FILES - Detects new status files
+-- │  ├─ CRMI_RAW_STREAM_CUSTOMER_FILES        - Detects new customer files
+-- │  ├─ CRMI_RAW_STREAM_ADDRESS_FILES         - Detects new address files
+-- │  ├─ CRMI_RAW_STREAM_EXPOSED_PERSON_FILES  - Detects new PEP files
+-- │  ├─ CRMI_RAW_STREAM_CUSTOMER_EVENT_FILES  - Detects new event files
+-- │  └─ CRMI_RAW_STREAM_CUSTOMER_STATUS_FILES - Detects new status files
 -- │
 -- └─ TASKS (5 - All Serverless):
---    ├─ CRMI_TASK_LOAD_CUSTOMERS        - Automated customer loading
---    ├─ CRMI_TASK_LOAD_ADDRESSES        - Automated address loading
---    ├─ CRMI_TASK_LOAD_EXPOSED_PERSON   - Automated PEP loading
---    ├─ CRMI_TASK_LOAD_CUSTOMER_EVENTS  - Automated event loading
---    └─ CRMI_TASK_LOAD_CUSTOMER_STATUS  - Automated status loading
+--    ├─ CRMI_RAW_TASK_LOAD_CUSTOMERS        - Automated customer loading
+--    ├─ CRMI_RAW_TASK_LOAD_ADDRESSES        - Automated address loading
+--    ├─ CRMI_RAW_TASK_LOAD_EXPOSED_PERSON   - Automated PEP loading
+--    ├─ CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS  - Automated event loading
+--    └─ CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS  - Automated status loading
 --
 -- RELATED SCHEMAS:
 -- - CRM_AGG_001 - Customer aggregations and SCD Type 2 views
@@ -73,7 +73,7 @@ USE SCHEMA CRM_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Customer master data stage
-CREATE OR REPLACE STAGE CRMI_CUSTOMERS
+CREATE OR REPLACE STAGE CRMI_RAW_STAGE_CUSTOMERS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -81,7 +81,7 @@ CREATE OR REPLACE STAGE CRMI_CUSTOMERS
     COMMENT = 'Internal stage for customer master data CSV files. Expected pattern: *customers*.csv';
 
 -- Customer address data stage (SCD Type 2)
-CREATE OR REPLACE STAGE CRMI_ADDRESSES
+CREATE OR REPLACE STAGE CRMI_RAW_STAGE_ADDRESSES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -89,7 +89,7 @@ CREATE OR REPLACE STAGE CRMI_ADDRESSES
     COMMENT = 'Internal stage for customer address CSV files with SCD Type 2 support. Expected pattern: *customer_addresses*.csv';
 
 -- Politically Exposed Person compliance data stage
-CREATE OR REPLACE STAGE CRMI_EXPOSED_PERSON
+CREATE OR REPLACE STAGE CRMI_RAW_STAGE_EXPOSED_PERSON
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -97,7 +97,7 @@ CREATE OR REPLACE STAGE CRMI_EXPOSED_PERSON
     COMMENT = 'Internal stage for PEP (Politically Exposed Persons) compliance CSV files. Expected pattern: *pep*.csv';
 
 -- Customer lifecycle events stage
-CREATE OR REPLACE STAGE CRMI_CUSTOMER_EVENTS
+CREATE OR REPLACE STAGE CRMI_RAW_STAGE_CUSTOMER_EVENTS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -188,19 +188,19 @@ CREATE OR REPLACE FILE FORMAT CRMI_FF_CUSTOMER_STATUS_CSV
 -- and compliance. Tables use data sensitivity tags for PII protection.
 
 -- ------------------------------------------------------------
--- CRMI_CUSTOMER - Customer Master Data (SCD Type 2)
+-- CRMI_RAW_TB_CUSTOMER - Customer Master Data (SCD Type 2)
 -- ------------------------------------------------------------
 -- Comprehensive customer information with SCD Type 2 tracking for attribute changes.
 -- Each update to mutable attributes (employer, account_tier, etc.) creates a new record
 -- with INSERT_TIMESTAMP_UTC. Immutable attributes (name, DOB) remain constant across versions.
 --
 -- Supports 12 EMEA countries with localized data generation and anomaly detection.
--- Address data stored separately in CRMI_ADDRESSES with its own SCD Type 2 tracking.
+-- Address data stored separately in CRMI_RAW_TB_ADDRESSES with its own SCD Type 2 tracking.
 --
 -- Use CRMA_AGG_DT_CUSTOMER_CURRENT (in CRM_AGG_001 schema) for current state view.
 
 
-CREATE OR REPLACE TABLE CRMI_CUSTOMER (
+CREATE OR REPLACE TABLE CRMI_RAW_TB_CUSTOMER (
     CUSTOMER_ID VARCHAR(30) NOT NULL WITH TAG (SENSITIVITY_LEVEL='top_secret') COMMENT 'Unique customer identifier (CUST_XXXXX format)',
     FIRST_NAME VARCHAR(100) NOT NULL WITH TAG (SENSITIVITY_LEVEL='restricted') COMMENT 'Customer first name (localized to country)',
     FAMILY_NAME VARCHAR(100) NOT NULL WITH TAG (SENSITIVITY_LEVEL='restricted') COMMENT 'Customer family/last name (localized to country)',
@@ -220,19 +220,19 @@ CREATE OR REPLACE TABLE CRMI_CUSTOMER (
     CREDIT_SCORE_BAND VARCHAR(20) WITH TAG (SENSITIVITY_LEVEL='restricted') COMMENT 'Credit score band (POOR, FAIR, GOOD, VERY_GOOD, EXCELLENT)',
     INSERT_TIMESTAMP_UTC TIMESTAMP_NTZ NOT NULL COMMENT 'UTC timestamp when this customer record version was inserted (for SCD Type 2)',
 
-    CONSTRAINT PK_CRMI_CUSTOMER PRIMARY KEY (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)
+    CONSTRAINT PK_CRMI_RAW_TB_CUSTOMER PRIMARY KEY (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)
 )
-COMMENT = 'Customer master data table with SCD Type 2 support for tracking attribute changes over time. Extended attributes include employment, account tier, contact preferences, and risk profile. Multiple records per customer allowed, uniquely identified by (CUSTOMER_ID, INSERT_TIMESTAMP_UTC). Address data stored separately in CRMI_ADDRESSES with its own SCD Type 2 tracking.';
+COMMENT = 'Customer master data table with SCD Type 2 support for tracking attribute changes over time. Extended attributes include employment, account tier, contact preferences, and risk profile. Multiple records per customer allowed, uniquely identified by (CUSTOMER_ID, INSERT_TIMESTAMP_UTC). Address data stored separately in CRMI_RAW_TB_ADDRESSES with its own SCD Type 2 tracking.';
 
 -- ------------------------------------------------------------
--- CRMI_ADDRESSES - Customer Address Base Table (SCD Type 2)
+-- CRMI_RAW_TB_ADDRESSES - Customer Address Base Table (SCD Type 2)
 -- ------------------------------------------------------------
 -- Append-only address table supporting SCD Type 2 via INSERT_TIMESTAMP_UTC.
 -- Dynamic tables in CRM_AGG_001 schema provide current and historical views.
 -- Each address change creates a new record with timestamp for audit trail.
 
-CREATE OR REPLACE TABLE CRMI_ADDRESSES (
-    CUSTOMER_ID VARCHAR(30) NOT NULL COMMENT 'Reference to customer (foreign key to CRMI_CUSTOMER)',
+CREATE OR REPLACE TABLE CRMI_RAW_TB_ADDRESSES (
+    CUSTOMER_ID VARCHAR(30) NOT NULL COMMENT 'Reference to customer (foreign key to CRMI_RAW_TB_CUSTOMER)',
     STREET_ADDRESS VARCHAR(200) NOT NULL WITH TAG (SENSITIVITY_LEVEL='top_secret') COMMENT 'Street address (localized format)',
     CITY VARCHAR(100) NOT NULL WITH TAG (SENSITIVITY_LEVEL='restricted') COMMENT 'City name (localized to country)',
     STATE VARCHAR(100) COMMENT 'State/Region (where applicable for the country)',
@@ -240,18 +240,18 @@ CREATE OR REPLACE TABLE CRMI_ADDRESSES (
     COUNTRY VARCHAR(50) NOT NULL COMMENT 'Customer country (12 EMEA countries supported)',
     INSERT_TIMESTAMP_UTC TIMESTAMP_NTZ NOT NULL COMMENT 'UTC timestamp when this address record was inserted (for SCD Type 2)',
     
-    CONSTRAINT PK_CRMI_ADDRESSES PRIMARY KEY (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)
+    CONSTRAINT PK_CRMI_RAW_TB_ADDRESSES PRIMARY KEY (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)
 )
 COMMENT = 'Customer address base table with append-only structure (SCD Type 2). Multiple records per customer are allowed, uniquely identified by (CUSTOMER_ID, INSERT_TIMESTAMP_UTC). Dynamic tables in CRM_AGG_001 provide current and historical views.';
 
 -- ------------------------------------------------------------
--- CRMI_EXPOSED_PERSON - Politically Exposed Persons (Compliance)
+-- CRMI_RAW_TB_EXPOSED_PERSON - Politically Exposed Persons (Compliance)
 -- ------------------------------------------------------------
 -- PEP master data for regulatory compliance and risk management.
 -- Tracks current and former political figures, family members, and associates
 -- for automated compliance screening and regulatory reporting requirements.
 
-CREATE OR REPLACE TABLE CRMI_EXPOSED_PERSON (
+CREATE OR REPLACE TABLE CRMI_RAW_TB_EXPOSED_PERSON (
     EXPOSED_PERSON_ID VARCHAR(50) NOT NULL COMMENT 'Unique PEP identifier',
     FULL_NAME VARCHAR(200) NOT NULL WITH TAG (SENSITIVITY_LEVEL='top_secret') COMMENT 'Full name of the politically exposed person',
     FIRST_NAME VARCHAR(100) WITH TAG (SENSITIVITY_LEVEL='top_secret') COMMENT 'First name',
@@ -271,12 +271,12 @@ CREATE OR REPLACE TABLE CRMI_EXPOSED_PERSON (
     LAST_UPDATED DATE NOT NULL COMMENT 'Date when record was last updated (YYYY-MM-DD)',
     CREATED_DATE DATE NOT NULL COMMENT 'Date when record was created (YYYY-MM-DD)',
     
-    CONSTRAINT PK_CRMI_EXPOSED_PERSON PRIMARY KEY (EXPOSED_PERSON_ID)
+    CONSTRAINT PK_CRMI_RAW_TB_EXPOSED_PERSON PRIMARY KEY (EXPOSED_PERSON_ID)
 )
 COMMENT = 'Politically Exposed Persons (PEP) master data for compliance and risk management. Tracks current and former political figures, their family members, and close associates for regulatory compliance.';
 
 -- ------------------------------------------------------------
--- CRMI_CUSTOMER_EVENT - Customer Lifecycle Event Log
+-- CRMI_RAW_TB_CUSTOMER_EVENT - Customer Lifecycle Event Log
 -- ------------------------------------------------------------
 -- Comprehensive lifecycle event tracking for churn prediction and behavioral analytics.
 -- Captures all significant customer status changes, account modifications, and milestones.
@@ -295,9 +295,9 @@ COMMENT = 'Politically Exposed Persons (PEP) master data for compliance and risk
 -- Purpose: Enable quick filtering and reporting without parsing EVENT_DETAILS JSON.
 -- The full details are stored in EVENT_DETAILS as structured JSON.
 
-CREATE OR REPLACE TABLE CRMI_CUSTOMER_EVENT (
+CREATE OR REPLACE TABLE CRMI_RAW_TB_CUSTOMER_EVENT (
     EVENT_ID VARCHAR(50) NOT NULL COMMENT 'Unique event identifier (EVT_XXXXX format)',
-    CUSTOMER_ID VARCHAR(30) NOT NULL COMMENT 'Reference to customer (foreign key to CRMI_CUSTOMER)',
+    CUSTOMER_ID VARCHAR(30) NOT NULL COMMENT 'Reference to customer (foreign key to CRMI_RAW_TB_CUSTOMER)',
     EVENT_TYPE VARCHAR(30) NOT NULL COMMENT 'Type of event (ONBOARDING, ADDRESS_CHANGE, EMPLOYMENT_CHANGE, ACCOUNT_UPGRADE, ACCOUNT_DOWNGRADE, ACCOUNT_CLOSE, REACTIVATION, CHURN)',
     EVENT_DATE DATE NOT NULL COMMENT 'Date when the event occurred (YYYY-MM-DD)',
     EVENT_TIMESTAMP_UTC TIMESTAMP_NTZ NOT NULL COMMENT 'UTC timestamp of the event for precise ordering',
@@ -312,32 +312,32 @@ CREATE OR REPLACE TABLE CRMI_CUSTOMER_EVENT (
     NOTES VARCHAR(1000) WITH TAG (SENSITIVITY_LEVEL='restricted') COMMENT 'Free-text notes about the event for compliance or customer service',
     INSERT_TIMESTAMP_UTC TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP() COMMENT 'System timestamp when record was inserted',
     
-    CONSTRAINT PK_CRMI_CUSTOMER_EVENT PRIMARY KEY (EVENT_ID)
+    CONSTRAINT PK_CRMI_RAW_TB_CUSTOMER_EVENT PRIMARY KEY (EVENT_ID)
 )
-COMMENT = 'Customer lifecycle event log tracking all significant customer status changes, account modifications, and behavioral milestones. Used for lifecycle analytics, churn prediction, and AML correlation. PREVIOUS_VALUE and NEW_VALUE provide quick summaries; full details in EVENT_DETAILS JSON. FK constraint removed due to SCD Type 2 composite PK in CRMI_CUSTOMER.';
+COMMENT = 'Customer lifecycle event log tracking all significant customer status changes, account modifications, and behavioral milestones. Used for lifecycle analytics, churn prediction, and AML correlation. PREVIOUS_VALUE and NEW_VALUE provide quick summaries; full details in EVENT_DETAILS JSON. FK constraint removed due to SCD Type 2 composite PK in CRMI_RAW_TB_CUSTOMER.';
 
 -- ------------------------------------------------------------
--- CRMI_CUSTOMER_STATUS - Customer Status History (SCD Type 2)
+-- CRMI_RAW_TB_CUSTOMER_STATUS - Customer Status History (SCD Type 2)
 -- ------------------------------------------------------------
 -- Maintains current and historical customer status for lifecycle analysis.
 -- Implements SCD Type 2 with IS_CURRENT flag and effective date ranges.
--- Linked to triggering events in CRMI_CUSTOMER_EVENT for audit trail.
+-- Linked to triggering events in CRMI_RAW_TB_CUSTOMER_EVENT for audit trail.
 
-CREATE OR REPLACE TABLE CRMI_CUSTOMER_STATUS (
+CREATE OR REPLACE TABLE CRMI_RAW_TB_CUSTOMER_STATUS (
     STATUS_ID VARCHAR(50) NOT NULL COMMENT 'Unique status record identifier (STAT_XXXXX format)',
-    CUSTOMER_ID VARCHAR(30) NOT NULL COMMENT 'Reference to customer (foreign key to CRMI_CUSTOMER)',
+    CUSTOMER_ID VARCHAR(30) NOT NULL COMMENT 'Reference to customer (foreign key to CRMI_RAW_TB_CUSTOMER)',
     STATUS VARCHAR(30) NOT NULL COMMENT 'Customer status (ACTIVE/INACTIVE/DORMANT/SUSPENDED/CLOSED/REACTIVATED)',
     STATUS_REASON VARCHAR(100) COMMENT 'Reason for status change (e.g., VOLUNTARY_CLOSURE, INACTIVITY, REGULATORY_SUSPENSION)',
     STATUS_START_DATE DATE NOT NULL COMMENT 'Date when this status became effective',
     STATUS_END_DATE DATE COMMENT 'Date when this status ended (NULL if current)',
     IS_CURRENT BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Flag indicating if this is the current status',
-    LINKED_EVENT_ID VARCHAR(50) COMMENT 'Reference to triggering event in CRMI_CUSTOMER_EVENT',
+    LINKED_EVENT_ID VARCHAR(50) COMMENT 'Reference to triggering event in CRMI_RAW_TB_CUSTOMER_EVENT',
     INSERT_TIMESTAMP_UTC TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP() COMMENT 'System timestamp when record was inserted',
     
-    CONSTRAINT PK_CRMI_CUSTOMER_STATUS PRIMARY KEY (STATUS_ID),
-    CONSTRAINT FK_CRMI_STATUS_EVENT FOREIGN KEY (LINKED_EVENT_ID) REFERENCES CRMI_CUSTOMER_EVENT (EVENT_ID)
+    CONSTRAINT PK_CRMI_RAW_TB_CUSTOMER_STATUS PRIMARY KEY (STATUS_ID),
+    CONSTRAINT FK_CRMI_STATUS_EVENT FOREIGN KEY (LINKED_EVENT_ID) REFERENCES CRMI_RAW_TB_CUSTOMER_EVENT (EVENT_ID)
 )
-COMMENT = 'Customer status history with SCD Type 2 tracking. Maintains current and historical customer status for lifecycle analysis, churn prediction, and regulatory reporting. Linked to CRMI_CUSTOMER_EVENT for complete audit trail. FK to CRMI_CUSTOMER removed due to SCD Type 2 composite PK.';
+COMMENT = 'Customer status history with SCD Type 2 tracking. Maintains current and historical customer status for lifecycle analysis, churn prediction, and regulatory reporting. Linked to CRMI_RAW_TB_CUSTOMER_EVENT for complete audit trail. FK to CRMI_RAW_TB_CUSTOMER removed due to SCD Type 2 composite PK.';
 
 -- ============================================================
 -- SECTION 4: STREAMS
@@ -347,29 +347,29 @@ COMMENT = 'Customer status history with SCD Type 2 tracking. Maintains current a
 -- tracking for reliable data pipeline processing.
 
 -- Customer file detection stream
-CREATE OR REPLACE STREAM CRMI_STREAM_CUSTOMER_FILES
-    ON STAGE CRMI_CUSTOMERS
-    COMMENT = 'Monitors CRMI_CUSTOMERS stage for new customer CSV files. Triggers CRMI_TASK_LOAD_CUSTOMERS when files matching *customers*.csv pattern are detected';
+CREATE OR REPLACE STREAM CRMI_RAW_STREAM_CUSTOMER_FILES
+    ON STAGE CRMI_RAW_STAGE_CUSTOMERS
+    COMMENT = 'Monitors CRMI_RAW_STAGE_CUSTOMERS stage for new customer CSV files. Triggers CRMI_RAW_TASK_LOAD_CUSTOMERS when files matching *customers*.csv pattern are detected';
 
 -- Address file detection stream
-CREATE OR REPLACE STREAM CRMI_STREAM_ADDRESS_FILES
-    ON STAGE CRMI_ADDRESSES
-    COMMENT = 'Monitors CRMI_ADDRESSES stage for new address CSV files. Triggers CRMI_TASK_LOAD_ADDRESSES for SCD Type 2 processing when files matching *customer_addresses*.csv pattern are detected';
+CREATE OR REPLACE STREAM CRMI_RAW_STREAM_ADDRESS_FILES
+    ON STAGE CRMI_RAW_STAGE_ADDRESSES
+    COMMENT = 'Monitors CRMI_RAW_STAGE_ADDRESSES stage for new address CSV files. Triggers CRMI_RAW_TASK_LOAD_ADDRESSES for SCD Type 2 processing when files matching *customer_addresses*.csv pattern are detected';
 
 -- PEP file detection stream
-CREATE OR REPLACE STREAM CRMI_STREAM_EXPOSED_PERSON_FILES
-    ON STAGE CRMI_EXPOSED_PERSON
-    COMMENT = 'Monitors CRMI_EXPOSED_PERSON stage for new PEP compliance CSV files. Triggers CRMI_TASK_LOAD_EXPOSED_PERSON when files matching *pep*.csv pattern are detected';
+CREATE OR REPLACE STREAM CRMI_RAW_STREAM_EXPOSED_PERSON_FILES
+    ON STAGE CRMI_RAW_STAGE_EXPOSED_PERSON
+    COMMENT = 'Monitors CRMI_RAW_STAGE_EXPOSED_PERSON stage for new PEP compliance CSV files. Triggers CRMI_RAW_TASK_LOAD_EXPOSED_PERSON when files matching *pep*.csv pattern are detected';
 
 -- Lifecycle event file detection stream
-CREATE OR REPLACE STREAM CRMI_STREAM_CUSTOMER_EVENT_FILES 
-    ON STAGE CRMI_CUSTOMER_EVENTS
-    COMMENT = 'Monitors CRMI_CUSTOMER_EVENTS stage for new lifecycle event CSV files. Triggers CRMI_TASK_LOAD_CUSTOMER_EVENTS when files matching *customer_events*.csv pattern are detected';
+CREATE OR REPLACE STREAM CRMI_RAW_STREAM_CUSTOMER_EVENT_FILES 
+    ON STAGE CRMI_RAW_STAGE_CUSTOMER_EVENTS
+    COMMENT = 'Monitors CRMI_RAW_STAGE_CUSTOMER_EVENTS stage for new lifecycle event CSV files. Triggers CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS when files matching *customer_events*.csv pattern are detected';
 
 -- Status history file detection stream
-CREATE OR REPLACE STREAM CRMI_STREAM_CUSTOMER_STATUS_FILES 
-    ON STAGE CRMI_CUSTOMER_EVENTS
-    COMMENT = 'Monitors CRMI_CUSTOMER_EVENTS stage for new status history CSV files. Triggers CRMI_TASK_LOAD_CUSTOMER_STATUS when files matching *customer_status*.csv pattern are detected';
+CREATE OR REPLACE STREAM CRMI_RAW_STREAM_CUSTOMER_STATUS_FILES 
+    ON STAGE CRMI_RAW_STAGE_CUSTOMER_EVENTS
+    COMMENT = 'Monitors CRMI_RAW_STAGE_CUSTOMER_EVENTS stage for new status history CSV files. Triggers CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS when files matching *customer_status*.csv pattern are detected';
 
 -- ============================================================
 -- SECTION 5: TASKS (All Serverless)
@@ -381,17 +381,17 @@ CREATE OR REPLACE STREAM CRMI_STREAM_CUSTOMER_STATUS_FILES
 -- ------------------------------------------------------------
 -- Customer master data loading task
 -- Serverless task: Automated loading of customer master data from CSV files.
--- Triggered by CRMI_STREAM_CUSTOMER_FILES when new files arrive.
+-- Triggered by CRMI_RAW_STREAM_CUSTOMER_FILES when new files arrive.
 -- Supports both file formats:
 --   - customers.csv (17 cols): Initial load, uses CURRENT_TIMESTAMP()
 --   - customer_updates/*.csv (18 cols): Updates with insert_timestamp_utc
 -- ------------------------------------------------------------
-CREATE OR REPLACE TASK CRMI_TASK_LOAD_CUSTOMERS
+CREATE OR REPLACE TASK CRMI_RAW_TASK_LOAD_CUSTOMERS
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_STREAM_CUSTOMER_FILES')
+    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_RAW_STREAM_CUSTOMER_FILES')
 AS
-    COPY INTO CRMI_CUSTOMER (
+    COPY INTO CRMI_RAW_TB_CUSTOMER (
         CUSTOMER_ID, 
         FIRST_NAME, 
         FAMILY_NAME, 
@@ -434,7 +434,7 @@ AS
                 TRY_CAST($18 AS TIMESTAMP_NTZ),  -- Use timestamp from customer_updates/*.csv (18 cols)
                 CURRENT_TIMESTAMP()               -- Fall back to current time for customers.csv (17 cols)
             ) AS INSERT_TIMESTAMP_UTC
-        FROM @CRMI_CUSTOMERS
+        FROM @CRMI_RAW_STAGE_CUSTOMERS
     )
     PATTERN = '.*customers.*\.csv'
     FILE_FORMAT = CRMI_FF_CUSTOMER_CSV
@@ -445,12 +445,12 @@ AS
 -- Serverless task: Automated loading of customer address data with SCD Type 2 support.
 -- Uses explicit column mapping and handles empty state values.
 -- ------------------------------------------------------------
-CREATE OR REPLACE TASK CRMI_TASK_LOAD_ADDRESSES
+CREATE OR REPLACE TASK CRMI_RAW_TASK_LOAD_ADDRESSES
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_STREAM_ADDRESS_FILES')
+    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_RAW_STREAM_ADDRESS_FILES')
 AS
-    COPY INTO CRMI_ADDRESSES (
+    COPY INTO CRMI_RAW_TB_ADDRESSES (
         CUSTOMER_ID, 
         STREET_ADDRESS, 
         CITY, 
@@ -468,7 +468,7 @@ AS
             $5::VARCHAR(20) AS ZIPCODE,
             $6::VARCHAR(50) AS COUNTRY,
             $7::TIMESTAMP_NTZ AS INSERT_TIMESTAMP_UTC
-        FROM @CRMI_ADDRESSES
+        FROM @CRMI_RAW_STAGE_ADDRESSES
     )
     PATTERN = '.*customer_addresses.*\.csv'
     FILE_FORMAT = CRMI_FF_ADDRESS_CSV
@@ -478,12 +478,12 @@ AS
 -- PEP compliance data loading task
 -- Serverless task: Automated loading of PEP (Politically Exposed Persons) CSV files from stage.
 -- ------------------------------------------------------------
-CREATE OR REPLACE TASK CRMI_TASK_LOAD_EXPOSED_PERSON
+CREATE OR REPLACE TASK CRMI_RAW_TASK_LOAD_EXPOSED_PERSON
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_STREAM_EXPOSED_PERSON_FILES')
+    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_RAW_STREAM_EXPOSED_PERSON_FILES')
 AS
-    COPY INTO CRMI_EXPOSED_PERSON (
+    COPY INTO CRMI_RAW_TB_EXPOSED_PERSON (
         EXPOSED_PERSON_ID, 
         FULL_NAME, 
         FIRST_NAME, 
@@ -503,7 +503,7 @@ AS
         LAST_UPDATED, 
         CREATED_DATE
     )
-    FROM @CRMI_EXPOSED_PERSON
+    FROM @CRMI_RAW_STAGE_EXPOSED_PERSON
     PATTERN = '.*pep.*\.csv'
     FILE_FORMAT = CRMI_FF_EXPOSED_PERSON_CSV
     ON_ERROR = CONTINUE;
@@ -513,12 +513,12 @@ AS
 -- Serverless task: Automated loading of customer lifecycle event files from stage.
 -- Processes events every 5 minutes for near-real-time lifecycle analytics.
 -- ------------------------------------------------------------
-CREATE OR REPLACE TASK CRMI_TASK_LOAD_CUSTOMER_EVENTS
+CREATE OR REPLACE TASK CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
-    SCHEDULE = '5 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_STREAM_CUSTOMER_EVENT_FILES')
+    SCHEDULE = '60 MINUTE'
+    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_RAW_STREAM_CUSTOMER_EVENT_FILES')
 AS
-    COPY INTO CRMI_CUSTOMER_EVENT (
+    COPY INTO CRMI_RAW_TB_CUSTOMER_EVENT (
         EVENT_ID,
         CUSTOMER_ID,
         EVENT_TYPE,
@@ -550,7 +550,7 @@ AS
             $12::VARCHAR(20),
             NULLIF($13, '')::DATE,  -- Handle empty review dates
             $14::VARCHAR(1000)
-        FROM @CRMI_CUSTOMER_EVENTS
+        FROM @CRMI_RAW_STAGE_CUSTOMER_EVENTS
     )
     FILE_FORMAT = CRMI_FF_CUSTOMER_EVENT_CSV
     PATTERN = '.*customer_events.*\.csv'
@@ -561,12 +561,12 @@ AS
 -- Serverless task: Automated loading of customer status history files from stage.
 -- Processes status changes every 5 minutes for near-real-time status tracking.
 -- ------------------------------------------------------------
-CREATE OR REPLACE TASK CRMI_TASK_LOAD_CUSTOMER_STATUS
+CREATE OR REPLACE TASK CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
-    SCHEDULE = '5 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_STREAM_CUSTOMER_STATUS_FILES')
+    SCHEDULE = '60 MINUTE'
+    WHEN SYSTEM$STREAM_HAS_DATA('CRMI_RAW_STREAM_CUSTOMER_STATUS_FILES')
 AS
-    COPY INTO CRMI_CUSTOMER_STATUS (
+    COPY INTO CRMI_RAW_TB_CUSTOMER_STATUS (
         STATUS_ID,
         CUSTOMER_ID,
         STATUS,
@@ -586,7 +586,7 @@ AS
             $6::DATE,
             $7::BOOLEAN,
             $8::VARCHAR(50)
-        FROM @CRMI_CUSTOMER_EVENTS
+        FROM @CRMI_RAW_STAGE_CUSTOMER_EVENTS
     )
     FILE_FORMAT = CRMI_FF_CUSTOMER_STATUS_CSV
     PATTERN = '.*customer_status.*\.csv'
@@ -599,19 +599,19 @@ AS
 -- controlled deployment and testing before enabling automated data flows.
 
 -- Enable customer data loading
-ALTER TASK CRMI_TASK_LOAD_CUSTOMERS RESUME;
+ALTER TASK CRMI_RAW_TASK_LOAD_CUSTOMERS RESUME;
 
 -- Enable address data loading (SCD Type 2)
-ALTER TASK CRMI_TASK_LOAD_ADDRESSES RESUME;
+ALTER TASK CRMI_RAW_TASK_LOAD_ADDRESSES RESUME;
 
 -- Enable PEP compliance data loading
-ALTER TASK CRMI_TASK_LOAD_EXPOSED_PERSON RESUME;
+ALTER TASK CRMI_RAW_TASK_LOAD_EXPOSED_PERSON RESUME;
 
 -- Enable customer lifecycle event loading
-ALTER TASK CRMI_TASK_LOAD_CUSTOMER_EVENTS RESUME;
+ALTER TASK CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS RESUME;
 
 -- Enable customer status history loading
-ALTER TASK CRMI_TASK_LOAD_CUSTOMER_STATUS RESUME;
+ALTER TASK CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS RESUME;
 
 -- ============================================================
 -- SCHEMA COMPLETION STATUS

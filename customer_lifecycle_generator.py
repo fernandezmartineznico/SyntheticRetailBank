@@ -768,8 +768,8 @@ class CustomerLifecycleGenerator:
             output_file = events_dir / f'customer_events_{date}.csv'
             
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                # Use QUOTE_MINIMAL to avoid double-quoting JSON
-                writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_MINIMAL)
+                # Use QUOTE_NONNUMERIC to properly quote all text fields (fixes comma-in-name issues)
+                writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_NONNUMERIC)
                 writer.writeheader()
                 
                 for event in date_events:
@@ -804,7 +804,7 @@ class CustomerLifecycleGenerator:
                 'STATUS_ID', 'CUSTOMER_ID', 'STATUS', 'STATUS_REASON',
                 'STATUS_START_DATE', 'STATUS_END_DATE', 'IS_CURRENT', 'LINKED_EVENT_ID'
             ]
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_NONNUMERIC)
             writer.writeheader()
             
             for status in statuses:

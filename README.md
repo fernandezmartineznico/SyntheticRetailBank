@@ -1,626 +1,336 @@
 # Synthetic Retail Bank
 
-A showcase demonstrating risk management and governance challenges faced by modern retail banks in the Europe (EMEA) region. This synthetic bank environment illustrates real-world scenarios including anti-money laundering compliance, transaction monitoring, customer due diligence, and regulatory reporting requirements that financial institutions must navigate daily.
+A comprehensive synthetic banking environment demonstrating modern risk management, governance, and compliance challenges faced by EMEA financial institutions. Features end-to-end data generation, regulatory reporting, and interactive analytics for AML, credit risk, market risk, and wealth management.
 
-## Business-Relevant Overview
+## What This Platform Delivers
 
-| Original Section                      | Simplified & Business-Centric Description                                                                                                                                                                                                                                                                                                              |
-|---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Compliance & Regulatory Risk          | **Financial Crime Prevention & Oversight**: Focuses on meeting mandatory legal obligations for Anti-Money Laundering (AML), identifying Politically Exposed Persons (PEP), and ensuring accurate regulatory reporting (e.g., GDPR, MiFID II). The core purpose is to prevent financial crime and avoid regulatory fines.                               |
-| Credit Risk Management & IRB Approach | **Capital Adequacy & Lending Risk**: Simulates the advanced approach (IRB) for calculating the bank's regulatory capital reserves (Risk Weighted Assets - RWA) based on the likelihood of customer defaults (PD, LGD, EAD). The core purpose is to ensure financial stability and solvency.                                                            |
-| Operational Risk Management           | **Day-to-Day Business Resilience**: Covers risks arising from execution failure, system failure, or external events. Focuses on real-time transaction monitoring, managing settlement/counterparty risk, and ensuring robust data governance (e.g., customer audit trails). The core purpose is to maintain service quality and operational stability. |
-| Financial Crime Prevention            | **Anomaly Detection & Fraud Control**: A practical layer of defense against money laundering and fraud, using behavioral baselines to detect high-risk patterns like structuring, large-value trades, and suspicious cross-border activity. The core purpose is to protect the bank's assets and reputation.                                           |
-| Key Capabilities                      | **Data Utility for GRC (Governance, Risk, Compliance)**: The generated data is engineered for specific validation tasks, including testing vendor RegTech systems, calibrating internal risk scoring models, and providing an auditable, end-to-end data lineage for regulatory examiners.                                                             |
+| Domain | Purpose | Key Value |
+|--------|---------|-----------|
+| **Financial Crime Prevention** | AML/CTF compliance, PEP screening, sanctions monitoring | Prevent financial crime, avoid regulatory fines, demonstrate control effectiveness |
+| **Credit & Capital Management** | Basel III/IV IRB approach, RWA calculation, portfolio risk | Ensure regulatory capital adequacy and financial stability |
+| **Market Risk (FRTB)** | Multi-asset trading book risk, sensitivities, capital charges | Meet FRTB Standardized Approach requirements |
+| **Operational Risk** | Transaction monitoring, data governance, audit trails | Maintain operational resilience and service quality |
+| **Wealth Management** | Portfolio performance (TWR), risk analytics, advisor management | Optimize client outcomes and revenue per advisor |
 
 ---
 
-## 📚 Business Guides Library
+## Interactive Analytics Notebooks
+**8 Interactive Notebooks** providing instant-access analytics for compliance, risk management, and wealth operations. Built on Snowflake Notebooks with Streamlit - no authentication required.
 
-**Purpose**: Transform technical capabilities into quantified business value. Each guide explains WHY capabilities matter and WHAT value they deliver to specific business roles through relatable before/after scenarios, real-world use cases, and measurable ROI.
+### Compliance & Risk (5 Notebooks)
 
-### Complete Guide Portfolio (€35.02M Total Annual Value)
+| Notebook | Audience | Key Analytics |
+|----------|----------|---------------|
+| **[Customer Screening & KYC](notebooks/customer_screening_kyc.ipynb)** | CCO, Compliance | Risk segmentation, PEP/sanctions evidence, KYC completeness, alert aging, audit trails |
+| **[AML & Transaction Monitoring](notebooks/aml_transaction_monitoring.ipynb)** | AML Teams, FIU | Alert metrics, SAR/STR filing, backlog management, false positive analysis, risk heatmaps |
+| **[Sanctions & Embargo](notebooks/sanctions_embargo_control.ipynb)** | Sanctions Officer, Legal | Control effectiveness, list updates, breach detection, exposure monitoring |
+| **[Compliance Risk Mgmt](notebooks/compliance_risk_management.ipynb)** | CCO, Board, Audit | Enterprise risk register, regulatory breaches, top risks, incident remediation |
+| **[Controls & Data Quality](notebooks/controls_data_quality.ipynb)** | Internal Audit, Data Gov | Control testing, data quality, BCBS 239 validation, audit evidence |
 
-| Business Guide | Target Audience | Key Topics Covered |
-|----------------|----------------|-------------------|
-| **[CRM Business Guide](docs/crm_business_guide.md)** | CCO, Head of AML, Head of Customer Experience, CDO | Customer 360° views, PEP screening, lifecycle analytics, churn prediction, SCD Type 2 audit trails |
-| **[Payment & Treasury Guide](docs/payment_business_guide.md)** | Head of Treasury, Payment Operations, Fraud Prevention, AML Teams | Behavioral fraud detection (92% false positive reduction), SWIFT ISO20022 operations, liquidity management, settlement risk, currency exposure |
-| **[Wealth Management Guide](docs/wealth_management_business_guide.md)** | Wealth Advisors, Relationship Managers, Private Banking Teams | Time Weighted Return (TWR), asset allocation optimization, risk analytics & suitability, revenue optimization, client retention strategies |
-| **[Data Governance Guide](docs/data_governance_business_guide.md)** | CDO, Data Governance Teams, Compliance, Internal Audit | Data quality monitoring (99.2% accuracy), lineage & audit trails, GDPR/privacy management, BCBS 239 compliance (14 principles), master data management |
-| **[Lending Operations Guide](docs/lending_operations_business_guide.md)** | Head of Lending, Credit Officers, Loan Operations, Collections Teams | Loan origination & Document AI, 85% auto-decisioning, credit risk monitoring, collections optimization, Basel III/IV capital management |
-| **[Risk & Reporting Guide](docs/risk_reporting_business_guide.md)** | CRO, CFO, Trading Desks, Regulatory Reporting Teams | Customer analytics, equity trading, Basel III/IV credit risk (IRB), FRTB market risk, BCBS 239 compliance, portfolio performance |
+### Wealth & Operations (3 Notebooks)
 
-### How to Use These Guides
+| Notebook | Audience | Key Analytics |
+|----------|----------|---------------|
+| **[Employee Relationship Mgmt](notebooks/employee_relationship_management.ipynb)** | Wealth Mgmt, COO, HR | Advisor performance, AUM tracking, team dashboards, capacity planning, hiring needs |
+| **[Wealth Management](notebooks/wealth_management.ipynb)** | Wealth Advisors, Private Banking | TWR analysis, Sharpe ratio, asset allocation, fee tracking, client segmentation |
+| **[Lending Operations](notebooks/lending_operations.ipynb)** | Lending, Credit, Collections | Application tracking, auto-decisioning, NPL monitoring, Basel capital requirements |
 
-**For Business Leaders**: Each guide starts with a relatable "before/after" scenario demonstrating the business problem and solution. Jump to the Quick Reference Matrix for an executive summary of reports and value.
+**Features**: Interactive Streamlit dashboards • SQL queries • CSV export • Native Snowflake integration
 
-**For Implementation Teams**: Guides include detailed use cases with quantified ROI calculations, helping prioritize features and justify investment decisions.
+**Access**: Deployed automatically via `deploy_structure.sh` → Snowsight → Projects → Notebooks
 
-**For Showcaseing**: Use real-world scenarios and specific metrics to demonstrate value to prospects and customers in their language.
-
-### Guide Features
-
-Each business guide includes:
-- **Relatable Business Scenarios** - Real-world problems and solutions told as stories (not technical jargon)
-- **Quantified ROI** - Specific annual value calculations with transparent assumptions
-- **Quick Reference Matrix** - Executive summary table showing all reports and their business value
-- **Multiple Use Cases** - Diverse examples demonstrating breadth and depth of capabilities
-- **Implementation Roadmap** - Phased approach with milestones and expected value delivery
+**Documentation**: See [Notebook Overlap Analysis](notebooks/OVERLAP_EXECUTIVE_SUMMARY.md) for analytics coverage and consolidation opportunities
 
 ---
 
 ## Key Capabilities
 
-### **Customer Risk & Compliance Management**
-- **Multi-Jurisdictional Customer Base**: EMEA customers across 12 countries with localized compliance requirements
-- **Dynamic Risk Scoring**: Behavioral profiling with CRITICAL, HIGH, MODERATE, NORMAL risk classifications
-- **PEP Screening & Monitoring**: Politically Exposed Persons identification with fuzzy name matching algorithms
-- **Customer 360° Risk View**: Comprehensive profiles integrating master data, transaction history, lifecycle events, and compliance status
-- **Enhanced Due Diligence**: Automated triggers for high-risk customer segments and suspicious behavior patterns
-- **Customer Lifecycle Analytics**: Event tracking (onboarding, address changes, employment changes, account upgrades, closures, reactivations, churn)
-- **Churn Prediction**: ML-ready dataset with churn probability scoring (0-100%) based on transaction inactivity and lifecycle patterns
-- **Lifecycle Event Correlation**: AML detection correlating lifecycle events with transaction anomalies for SAR filing recommendations
+### Customer Risk & Compliance
+- **Multi-Jurisdictional Operations**: 12 EMEA countries with localized compliance requirements
+- **Dynamic Employee Hierarchy**: 3-tier structure (advisors → team leaders → super team leaders) with auto-scaling
+- **Relationship Management**: Complete customer-advisor history with workload balancing (200 clients/advisor max)
+- **Risk Classification**: Dynamic scoring (CRITICAL/HIGH/MODERATE/NORMAL) with behavioral profiling
+- **PEP & Sanctions Screening**: Fuzzy name matching with continuous monitoring
+- **Customer 360°**: Integrated profiles with master data, transactions, lifecycle events, compliance status
+- **Lifecycle Analytics**: Event tracking (onboarding, changes, upgrades, closures, churn) with ML-ready churn prediction
+- **Enhanced Due Diligence**: Automated triggers for high-risk segments and suspicious patterns
 
-### **Transaction Monitoring & AML**
-- **Real-Time Anomaly Detection**: Multi-dimensional behavioral analysis using statistical scoring models
-- **Suspicious Pattern Recognition**: Detection of structuring, layering, and integration money laundering techniques
-- **Cross-Border Payment Surveillance**: Multi-currency transaction monitoring with enhanced controls
-- **Trade-Based Money Laundering Detection**: Equity trading pattern analysis for unusual investment behaviors
-- **Regulatory Alert Generation**: Automated suspicious activity report (SAR) triggers and case management
+### AML & Transaction Monitoring
+- **Anomaly Detection**: Multi-dimensional behavioral analysis with statistical scoring
+- **Pattern Recognition**: Structuring, layering, integration techniques detection
+- **Cross-Border Surveillance**: Multi-currency monitoring with enhanced controls
+- **Trade-Based ML Detection**: Equity trading pattern analysis for unusual behaviors
+- **Automated Alerts**: SAR/STR triggers with case management
 
-### **Investment Performance & Portfolio Analytics**
-- **Time Weighted Return (TWR)**: Industry-standard investment performance measurement eliminating cash flow timing effects
-- **Risk-Adjusted Returns**: Sharpe ratio calculation for portfolio performance evaluation
-- **Volatility Analysis**: Standard deviation of returns for risk assessment and client suitability
-- **Maximum Drawdown**: Peak-to-trough decline tracking for downside risk management
-- **Portfolio Attribution**: Account-level and customer-level performance aggregation and analysis
+### Investment Performance & Portfolio Analytics
+- **Time-Weighted Return (TWR)**: Industry-standard performance measurement
+- **Risk-Adjusted Returns**: Sharpe ratio, volatility analysis, maximum drawdown tracking
+- **Portfolio Attribution**: Account-level and customer-level performance aggregation
+- **Asset Allocation**: Multi-asset class analysis (cash, equity, FI, commodities)
+- **Fee Analytics**: Commission tracking, cost ratios, net return calculations
 
-### **Governance & Audit Controls**
-- **Complete Audit Trail**: SCD Type 2 address tracking and comprehensive transaction history
-- **Data Lineage & Quality**: End-to-end data governance with validation and reconciliation controls
-- **Regulatory Reporting**: GDPR, MiFID II, Basel III, and PSD2 compliant data structures and processes
-- **Risk Appetite Monitoring**: Configurable thresholds and escalation procedures for risk limit breaches
-- **Management Information**: Executive dashboards and regulatory reporting with drill-down capabilities
-- **Data Sensitivity Classification**: Automated PII protection using Snowflake sensitivity tags and masking policies
+### Credit Risk & Capital Management (Basel III/IV)
+- **IRB Approach**: Internal Ratings Based regulatory capital calculation
+- **Risk Parameters**: PD, LGD, EAD modeling with portfolio aggregation
+- **RWA Calculation**: Automated risk-weighted assets and capital requirements
+- **Rating Systems**: AAA-CCC scales with default tracking and watch lists
+- **Model Validation**: Backtesting, performance monitoring, stress testing
 
-### **Credit Risk & Capital Management Framework**
-- **IRB Capital Adequacy**: Basel III/IV compliant Internal Ratings Based approach for regulatory capital
-- **Credit Risk Parameters**: PD, LGD, EAD modeling with exposure-weighted portfolio aggregation
-- **Risk Weighted Assets**: Automated RWA calculation and regulatory capital requirement monitoring
-- **Credit Rating Systems**: Internal rating scales (AAA-CCC) with default identification and watch list management
-- **Rating History & Migrations**: SCD Type 2 historical tracking of credit ratings with daily snapshots for trend analysis
-- **Default Tracking**: Real-time monitoring of new defaults, cured defaults, and net default changes
-- **Portfolio Risk Management**: Credit concentration analysis, vintage tracking, and collateral coverage monitoring
-- **Model Validation**: IRB model backtesting, performance monitoring with actual vs. predicted default rates, and stress testing capabilities
+### Market Risk (FRTB)
+- **Multi-Asset Coverage**: Equity, FX, interest rates, commodities, credit spreads
+- **Risk Sensitivities**: Delta, vega, curvature calculations for FRTB SA
+- **Fixed Income**: Government/corporate bonds with duration, DV01, credit spreads
+- **Commodities**: Energy, precious metals, base metals, agricultural with delta risk
+- **Capital Charges**: FRTB SA calculations with correlation benefits
 
-### **BCBS 239 Risk Data Aggregation & Reporting**
-- **Comprehensive Risk Aggregation**: Multi-dimensional risk data aggregation across all business lines and risk types
-- **Executive Risk Dashboards**: Real-time executive risk monitoring with key risk indicators and portfolio metrics
-- **Regulatory Reporting**: BCBS 239 compliant regulatory reporting capabilities with data quality metrics
-- **Risk Concentration Analysis**: Real-time risk concentration monitoring and breach detection
-- **Risk Limit Monitoring**: Automated risk limit monitoring with utilization tracking and alert management
-- **Data Quality Governance**: Comprehensive data quality monitoring with completeness, accuracy, and timeliness metrics
-- **Regulatory Compliance**: Basel III/IV compliance reporting with capital adequacy and risk coverage analysis
-- **IT Infrastructure Monitoring**: System performance, data processing times, and infrastructure health metrics
+### Governance & Audit
+- **Audit Trails**: SCD Type 2 tracking for addresses, ratings, customer status
+- **Data Governance**: End-to-end lineage with BCBS 239 validation
+- **Regulatory Reporting**: GDPR, MiFID II, Basel III/IV, PSD2 compliant structures
+- **Data Protection**: Automated PII classification with Snowflake sensitivity tags
+- **Quality Monitoring**: Completeness, accuracy, timeliness metrics
 
-### **FRTB Market Risk Framework**
-- **Multi-Asset Coverage**: Equity, FX, interest rate, commodity, and credit spread risk classes
-- **Interest Rate Risk**: Government and corporate bonds with duration, DV01, and credit spread calculations
-- **Commodity Risk**: Energy (crude oil, natural gas), precious metals (gold, silver), base metals (copper, aluminum), and agricultural commodities
-- **Risk Sensitivities**: Delta, vega, and curvature risk calculations for FRTB Standardized Approach (SA)
-- **Liquidity Classification**: Liquidity scores for Non-Modellable Risk Factor (NMRF) identification
-- **Capital Requirements**: FRTB SA capital charge calculations with correlation benefits across risk buckets
-- **Trading Book Analytics**: Position aggregation, P&L attribution, and desk-level risk metrics
-- **Regulatory Compliance**: Basel III/IV FRTB framework implementation with standardized risk bucketing
+## Data Protection & Governance
 
-### **Operational Risk Framework**
-- **Settlement Risk Management**: Payment timing analysis and counterparty exposure monitoring
-- **Concentration Risk**: Customer, geographic, and currency exposure analysis with limit monitoring
-- **Model Risk Management**: Statistical model validation and performance monitoring for anomaly detection
-- **Business Continuity**: Scenario analysis and stress testing capabilities for operational resilience
-- **Third-Party Risk**: Counterparty due diligence and ongoing monitoring of external relationships
+**Automated PII Protection** using Snowflake sensitivity tags:
 
-## Data Sensitivity Classification
+| Classification | Coverage | Access Level |
+|----------------|----------|--------------|
+| **TOP_SECRET** | Customer names, addresses, PEP data | Compliance, Risk Manager only |
+| **RESTRICTED** | Financial balances, risk ratings, transactions | Analysts+ |
+| **Untagged** | Aggregated metrics, operational data | All business users |
 
-The synthetic bank implements a focused data protection strategy using Snowflake sensitivity tags to automatically protect highly sensitive PII and financial data.
+**Benefits**: Automated masking • GDPR/CCPA compliant • Business-friendly (focused protection) • Audit-ready
 
-### **Implementation Approach**
-- **Single Tag**: `SENSITIVITY_LEVEL` with key/value pairs
-- **Focus**: Only tag highly sensitive PII and financial data requiring protection
-- **Values**: `'restricted'` and `'top_secret'` only
-- **Non-sensitive data**: Left untagged for business operations
+---
 
-### **Sensitivity Categories**
+## Architecture
 
-#### **RESTRICTED** - Highly sensitive PII data
-- Personal Identifiable Information (PII)
-- Financial amounts and balances
-- Risk assessments and credit ratings
-- Transaction descriptions and counterparty data
-- Trading quantities and amounts
+**Two-Layer System**: Data Generators → Snowflake DDL
 
-#### **TOP_SECRET** - Maximum protection
-- Full customer names and addresses
-- PEP (Politically Exposed Person) data
-- Street addresses and personal identifiers
-- Complete personal information
+### Data Generators (13 Python Modules)
 
-### **Potencial Role-Based Access Control**
+| Type | Generators |
+|------|------------|
+| **Master Data** | `customer_generator` • `employee_generator` • `pep_generator` |
+| **Transactions** | `pay_transaction_generator` • `equity_generator` • `fixed_income_generator` • `commodity_generator` |
+| **Supporting** | `fx_generator` • `swift_generator` • `mortgage_email_generator` |
+| **Lifecycle** | `customer_lifecycle_generator` • `address_update_generator` |
+| **Compliance** | `anomaly_patterns` (AML testing) |
 
-| Role | Untagged | RESTRICTED | TOP_SECRET |
-|------|----------|------------|------------|
-| **PUBLIC_USER** | Yes | No | No |
-| **BUSINESS_USER** | Yes | No | No |
-| **ANALYST** | Yes | Yes | No |
-| **SENIOR_ANALYST** | Yes | Yes | No |
-| **RISK_MANAGER** | Yes | Yes | Yes |
-| **COMPLIANCE_OFFICER** | Yes | Yes | Yes |
-| **DATA_SCIENTIST** | Yes | Yes | Yes |
+**External Integration**: Snowflake Data Exchange (Global Sanctions Data for real-time compliance screening)
 
-### **Key Benefits**
-- **Focused Protection**: Only tag highly sensitive PII data that requires protection
-- **Business Efficiency**: Untagged columns remain fully accessible for business operations
-- **Automated Security**: Tagged columns automatically protected by masking policies
-- **Compliance Ready**: GDPR, CCPA, and Basel III compliant data protection
+### Snowflake DDL (`structure/` directory)
 
-## What
+**3-Layer Architecture**:
+- **Raw Layer (0xx)**: Customer (`CRMI`), Accounts (`ACCI`), Payments (`PAYI`), Trades (`EQTI`), SWIFT (`ICGI`)
+- **Aggregation Layer (3xx)**: Customer 360° (`CRMA`), Balances (`ACCA`), Anomalies (`PAYA`), Performance (`REPP`)
+- **Reporting Layer (5xx)**: Risk analytics, compliance dashboards, investment reports
 
-This repository delivers a complete data generation and ingestion framework, organized into two core components: 
-- Data Generators (the synthetic data source)
-- Domain-Oriented DDL (the target schema and transformation structure).
+**Features**: Dynamic tables for auto-refresh • Streams & tasks for CDC • Semantic views for AI • SCD Type 2 tracking
 
-### Data Generators
+---
 
-| Generator                          | Description                                                                                  |
-|------------------------------------|----------------------------------------------------------------------------------------------|
-| **`customer_generator.py`**        | EMEA customer master data with localized names, addresses, and onboarding dates              |
-| **`pay_transaction_generator.py`** | Multi-currency payment transactions with realistic settlement patterns and anomaly injection |
-| **`equity_generator.py`**          | FIX protocol-compliant equity trades with market data and commission calculations            |
-| **`fixed_income_generator.py`**    | Fixed income trades (government/corporate bonds, interest rate swaps) with duration & DV01   |
-| **`commodity_generator.py`**       | Commodity trades (energy, metals, agricultural) with delta risk and volatility metrics       |
-| **`fx_generator.py`**              | Daily foreign exchange rates with bid/ask spreads for multi-currency support                 |
-| **`swift_generator.py`**           | ISO20022 SWIFT message generation (pacs.008, pacs.002) for cross-border payments             |
-| **`mortgage_email_generator.py`**  | Realistic mortgage application email threads (customer, internal, loan officer)              |
-| **`pep_generator.py`**             | Politically Exposed Persons reference data with fuzzy matching capabilities                  |
-| **`address_update_generator.py`**  | SCD Type 2 address change files for data governance and audit trails                         |
-| **`customer_lifecycle_generator.py`** | Customer lifecycle events (onboarding, address changes, employment changes, account upgrades, closures, reactivations, churn) and status history (SCD Type 2) for churn prediction and lifecycle analytics |
-| **`anomaly_patterns.py`**          | Suspicious transaction pattern injection for AML testing and training                        |
+## Quick Start
 
-### External Data Integration
+### Prerequisites
 
-| Component                          | Description                                                                                  |
-|------------------------------------|----------------------------------------------------------------------------------------------|
-| **`001_get_listings.sql`**         | Snowflake Data Exchange setup for Global Sanctions Data - real-time compliance screening    |
-| **Global Sanctions Data**          | External sanctions and watchlist data from Snowflake Data Exchange marketplace              |
-| **PEP Enhancement**                | Integration with Politically Exposed Persons screening for regulatory compliance             |
-| **Compliance Support**             | Real-time sanctions checking for customer onboarding and transaction monitoring             |
-
-### Domain-Oriented DDL (`structure/` directory)
-- **Raw Data Layer (0xx)**: Customer master (`CRMI`), accounts (`ACCI`), FX rates (`REFI`), payments (`PAYI`), equity trades (`EQTI`), SWIFT messages (`ICGI`), loan documents (`LOAI`)
-- **Aggregation Layer (3xx)**: Customer 360° views (`CRMA`), account balances (`ACCA`), payment anomalies (`PAYA`), investment performance (`PAYA`), SWIFT processing (`ICGA`)
-- **Reporting Layer (5xx)**: Risk analytics, compliance reporting, investment performance, and management dashboards (`REPP`)
-- **Architecture**: Snowflake-optimized DDL with business domain separation and data maturity layers
-
-## Installation
-
-1. Clone this repository:
 ```bash
+# 1. Clone repository
 git clone https://github.com/zBrainiac/SyntheticRetailBank.git
 cd SyntheticRetailBank
-```
 
-2. Setup Snowflake CLI:
-   - Follow the official [Snowflake CLI installation guide](https://docs.snowflake.com/en/developer-guide/snowflake-cli/install)
-   - Configure your connection: `snow connection add <my-sf-connection>`
+# 2. Setup Snowflake CLI (https://docs.snowflake.com/cli)
+snow connection add <my-sf-connection>
 
-3. Setup Python virtual environment:
-
-```bash
-# Create virtual environment (if it doesn't exist)
+# 3. Setup Python environment
 python -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate  # On macOS/Linux
-# or
-venv\Scripts\activate     # On Windows
+source venv/bin/activate  # macOS/Linux
+# OR: venv\Scripts\activate  # Windows
+pip install -r requirements.txt
 ```
 
-4. Install required dependencies:
+### One-Command Deployment (Recommended)
 
 ```bash
-# Install dependencies in virtual environment
-./venv/bin/pip install -r requirements.txt
-```
-
-## 🚀 Quick Start
-
-### **One-Command Deployment (Recommended)**
-
-Deploy the complete synthetic bank with automatic data upload:
-
-```bash
-# 1. Generate comprehensive data (19 months for proper dormancy and churn testing)
+# Generate data (1000 customers, 19 months of history)
 ./data_generator.sh 1000 --clean
 
-# 2. Deploy everything (structure + data upload + task activation)
-./deploy-structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
+# Deploy everything (SQL + notebooks + data + tasks)
+./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
 ```
 
-**Result**: Fully operational synthetic bank with all data loaded and processing automatically! 🎉
+**Result**: Fully operational synthetic bank in ~15 minutes!
 
-**What gets generated:**
-- 1000 customers with extended attributes (employment, account tier, risk profile)
-- 19 months of payment transactions, equity trades, fixed income & commodity trades
-- SWIFT ISO20022 messages, PEP data, mortgage emails
-- Customer lifecycle events, status history, address & attribute updates (SCD Type 2)
-- FX rates and anomaly patterns for AML testing
+**What's Deployed**:
+- All SQL objects (databases, schemas, tables, views, dynamic tables, streams, tasks)
+- 8 interactive notebooks → Snowsight → Projects → Notebooks
+- All generated data files uploaded to stages
+- Automated processing activated (tasks + dynamic tables)
 
-**⚠️ Important**: Always generate data **before** deploying structure, as the deployment script expects the generated files to exist for automatic upload.
+**What's Generated**:
+- 1000 customers (employment, risk profiles, account tiers)
+- ~15 employees (dynamic hierarchy with advisor assignments)
+- ~200K payment transactions (19 months)
+- ~6K equity trades + fixed income + commodities
+- SWIFT messages, PEP data, lifecycle events, SCD Type 2 history
 
-### **Step-by-Step Deployment**
+**Important**: Always generate data **before** deploying structure!
 
-If you prefer manual control:
+### Advanced Options
+
+**Maximum Coverage** (10K customers, all features):
+```bash
+python3 main.py --customers 10000 --period 24 --clean \
+  --generate-swift --generate-pep --generate-mortgage-emails \
+  --generate-address-updates --generate-customer-updates \
+  --generate-fixed-income --generate-commodities --generate-lifecycle
+```
+**Output**: ~2M transactions, ~66 employees, 1000+ files | **Runtime**: 10-15 minutes
+
+**Custom Volumes**:
+```bash
+python3 main.py --customers 10000 --period 24 --clean \
+  --swift-percentage 40 --pep-records 500 --mortgage-customers 20 \
+  --fixed-income-trades 5000 --commodity-trades 2000
+```
+
+### Manual Control (Step-by-Step)
 
 ```bash
-# 1. Generate data (default: 20 customers, 19 months, all generators)
-./data_generator.sh
+# 1. Generate data
+./data_generator.sh 1000 --clean
 
-# 2. Deploy SQL structure
-./deploy-structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
+# 2. Deploy SQL + notebooks + data
+./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
 
-# 3. Upload data manually (if needed)
+# 3. Re-upload data only (if needed)
 ./upload-data.sh --CONNECTION_NAME=<my-sf-connection>
+
+# For unstable networks or large file sets (1000+ files)
+./upload-data.sh --CONNECTION_NAME=<my-sf-connection> --BATCH_SIZE=100 --MAX_RETRIES=5
+
+# 4. Redeploy notebooks only (if needed)
+./deploy_notebooks.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
 ```
 
-**⚠️ Important**: Data generation must happen **before** structure deployment!
-
-### **Testing & Debugging**
+### Testing & Debugging
 
 ```bash
-# Preview everything (dry run)
-./deploy-structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection> --DRY_RUN
+# Dry run (preview changes)
+./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection> --DRY_RUN
 
-# Test single SQL file
-./deploy-structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection> --FILE=031_ICGI_swift_messages.sql
+# Test single file
+./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection> --FILE=035_ICGI_swift_messages.sql
 ```
 
-## Output Files
+---
 
-### Customer Data File
-**Filename**: `customers.csv`
+## Generated Data Files
 
-Contains EMEA customer information with localized data and extended attributes (17 columns):
+### Master Data
+| File | Description | Key Columns |
+|------|-------------|-------------|
+| `customers.csv` | Customer master (17 columns) | customer_id, name, dob, employment, account_tier, risk_classification, credit_score_band |
+| `customer_addresses.csv` | Initial addresses | street, city, country (SCD Type 2 ready) |
+| `employees.csv` | Employee hierarchy | employee_id, position_level, manager_id, performance_rating |
+| `client_assignments.csv` | Customer-advisor mapping | assignment_id, customer_id, advisor_id, dates (SCD Type 2) |
+| `accounts.csv` | Account master | account_id, account_type, base_currency, status |
+| `pep_data.csv` | PEP reference data | Fuzzy matching capabilities |
+| `customer_status.csv` | Status history | ACTIVE, CLOSED, CHURNED, REACTIVATED, DORMANT (SCD Type 2) |
 
-**Core Attributes:**
-- `customer_id`: Unique customer identifier (CUST_00001 format)
-- `first_name`: Customer first name (localized to country)
-- `family_name`: Customer family/last name (localized to country)
-- `date_of_birth`: Customer birth date (YYYY-MM-DD)
-- `onboarding_date`: Date when customer was onboarded (YYYY-MM-DD)
-- `reporting_currency`: Customer reporting currency based on country (EUR, GBP, USD, CHF, NOK, SEK, DKK, PLN)
-- `has_anomaly`: Boolean flag indicating if customer has anomalous behavior
+### Lifecycle & Updates (SCD Type 2)
+| Pattern | Description |
+|---------|-------------|
+| `address_updates/customer_addresses_YYYY-MM-DD.csv` | Date-stamped address changes for audit trails |
+| `customer_updates/customer_updates_YYYY-MM-DD.csv` | Employment, tier, contact, risk profile changes |
+| `customer_events/customer_events_YYYY-MM-DD.csv` | 8 event types: onboarding, changes, upgrades, closures, churn |
 
-**Employment Information:**
-- `employer`: Employer name (nullable for unemployed/retired)
-- `position`: Job position/title
-- `employment_type`: Employment type (FULL_TIME, PART_TIME, CONTRACT, SELF_EMPLOYED, RETIRED, UNEMPLOYED)
-- `income_range`: Income range bracket (e.g., 50K-75K, 100K-150K)
+### Transaction Data
+| Pattern | Description | Key Fields |
+|---------|-------------|------------|
+| `pay_transactions_YYYY-MM-DD.csv` | Daily payments | booking_date, value_date, amount (signed), currency, counterparty |
+| `trades_YYYY-MM-DD.csv` | Daily equity trades | FIX protocol compliant: trade_date, symbol, isin, side, price, commission |
+| `fx_rates_YYYY-MM-DD.csv` | Daily FX rates | Mid/bid/ask rates for multi-currency support |
 
-**Account & Contact Information:**
-- `account_tier`: Account tier (STANDARD, SILVER, GOLD, PLATINUM, PREMIUM)
-- `email`: Customer email address
-- `phone`: Customer phone number
-- `preferred_contact_method`: Preferred contact method (EMAIL, SMS, POST, MOBILE_APP)
+### Fixed Income & Commodities
+| File | Description | FRTB Metrics |
+|------|-------------|--------------|
+| `fixed_income_trades.csv` | Bonds & interest rate swaps | duration, DV01, credit_spread, liquidity_score |
+| `commodity_trades.csv` | Energy, metals, agricultural | delta, volatility, spot/forward prices |
 
-**Risk Profile:**
-- `risk_classification`: Risk classification (LOW, MEDIUM, HIGH)
-- `credit_score_band`: Credit score band (POOR, FAIR, GOOD, VERY_GOOD, EXCELLENT)
+### Unstructured & Supporting
+| Type | Files |
+|------|-------|
+| SWIFT Messages | `*.xml` (ISO20022 pacs.008, pacs.002) |
+| Emails | `*.txt` (mortgage application threads) |
+| Reports | `generation_summary.txt` (data volumes and statistics) |
 
-**Note**: Address data is stored separately in `customer_addresses.csv` with SCD Type 2 tracking support.
+**Scaling**: 100 customers → 15 employees | 1K customers → 15-18 employees | 10K customers → 66 employees (auto-balanced at ~170 clients/advisor)
 
-### Customer Address Files
+---
 
-**Initial Address File**: `customer_addresses.csv`
-- Contains the initial/onboarding address for each customer
-- Used as baseline for SCD Type 2 address tracking
+## Data Characteristics & Configuration
 
-**Address Update Files**: `address_updates/customer_addresses_YYYY-MM-DD.csv`
-- Date-stamped files containing address changes over time
-- Implements SCD Type 2 (Slowly Changing Dimension Type 2) for historical address tracking
-- Each file represents a batch of address changes on a specific date
-- Used by `CRMI_ADDRESSES` table for audit trails and compliance reporting
+### Realistic Transaction Patterns
+- **Business Hours**: 9 AM - 5 PM concentration
+- **Weekday Focus**: Business days with automatic weekend skipping
+- **Amount Distribution**: Log-normal for natural spread
+- **Settlement Timing**: Type/amount/currency-based (0-3 days)
+  - Small (< $1K): T+0 or T+1
+  - Medium ($1K-$10K): T+0 to T+2  
+  - Large (> $10K): T+0 to T+3 (verification)
+  - International: +1-2 days for non-USD
 
-### Customer Update Files
+### AML Anomaly Patterns (7 Types)
+1. **Large Amounts** - Significantly above baselines
+2. **High Frequency** - Unusual transaction volumes
+3. **Suspicious Counterparties** - Shell companies, offshore
+4. **Round Amounts** - 10K, 50K, 100K (structuring)
+5. **Off-Hours** - Outside business hours/weekends
+6. **Rapid Succession** - Multiple large in short periods
+7. **New Beneficiary Large** - Large to new counterparties
 
-**Customer Update Files**: `customer_updates/customer_updates_YYYY-MM-DD.csv`
-- Date-stamped files containing customer attribute changes (employment, account tier, contact info, risk profile)
-- Each file contains complete customer records with all 17 attributes plus `insert_timestamp_utc`
-- Implements SCD Type 2 for tracking customer attribute history over time
-- Used by `CRMI_CUSTOMER` table for historical analysis and lifecycle tracking
+### Configuration Options
+Customize via command line or `config.py`:
+- Customer count • Anomaly % (default: 5%)
+- Period (default: 19 months for churn)
+- Transaction frequency • Amount ranges • Currencies
 
-### Customer Lifecycle Files
+### Performance & Dependencies
+- **Speed**: ~1000 transactions/second
+- **Scaling**: Linear up to 10K customers
+- **Requirements**: Faker • NumPy • Python standard library
 
-**Lifecycle Event Files**: `customer_events/customer_events_YYYY-MM-DD.csv`
-- Date-stamped files containing customer lifecycle events
-- Event types (8 total): ONBOARDING, ADDRESS_CHANGE, EMPLOYMENT_CHANGE, ACCOUNT_UPGRADE, ACCOUNT_DOWNGRADE, ACCOUNT_CLOSE, REACTIVATION, CHURN
-- Data-driven events (generated from address/customer updates) and random events (closures, reactivations)
-- Used for churn prediction, lifecycle analytics, and AML correlation analysis
-
-**Customer Status History**: `customer_status.csv`
-- Tracks customer status transitions over time (SCD Type 2)
-- Status types: ACTIVE, CLOSED, CHURNED, REACTIVATED, DORMANT
-- Includes status start/end dates and IS_CURRENT flag
-- Used for lifecycle reporting and customer segmentation
-
-### Account Master Data File
-**Filename**: `accounts.csv`
-
-Contains account information for all customers with columns:
-- `account_id`: Unique account identifier (CUSTOMER_ID_ACCOUNT_TYPE_XX format)
-- `account_type`: Type of account (CHECKING, SAVINGS, BUSINESS, INVESTMENT)
-- `base_currency`: Account's base currency (EUR, GBP, USD, CHF, etc.)
-- `customer_id`: Reference to customer who owns the account
-- `status`: Account status (ACTIVE, DORMANT)
-
-Note: INVESTMENT accounts are used for equity trading settlements.
-
-### FX Rates File
-**Filename**: `fx_rates.csv`
-
-Contains daily foreign exchange rates with columns:
-- `date`: Rate date (YYYY-MM-DD)
-- `from_currency`: Source currency
-- `to_currency`: Target currency
-- `mid_rate`: Mid-market exchange rate
-- `bid_rate`: Bid exchange rate (bank buys at this rate)
-- `ask_rate`: Ask exchange rate (bank sells at this rate)
-
-### Daily Payment Transaction Files
-**Filename Pattern**: `pay_transactions_YYYY-MM-DD.csv`
-
-Each file contains payment transactions for a single business day with columns:
-- `booking_date`: Transaction timestamp when recorded (ISO 8601 UTC format: YYYY-MM-DD HH:MM:SS.fffffZ)
-- `value_date`: Date when funds are settled/available (YYYY-MM-DD)
-- `transaction_id`: Unique transaction identifier
-- `customer_id`: Reference to customer
-- `amount`: Signed transaction amount in original currency (positive = incoming, negative = outgoing)
-- `currency`: Transaction currency (USD, EUR, GBP, JPY, CAD, CHF)
-- `base_amount`: Signed transaction amount converted to base currency USD (positive = incoming, negative = outgoing)
-- `base_currency`: Base currency for reporting (USD)
-- `fx_rate`: Exchange rate used for conversion (from transaction currency to base currency)
-- `counterparty_account`: Counterparty account identifier
-- `description`: Transaction description (may contain anomaly indicators in [brackets])
-
-Note: Direction is determined by amount sign - no separate direction field.
-
-### Daily Equity Trade Files
-**Filename Pattern**: `trades_YYYY-MM-DD.csv`
-
-Each file contains equity trades for a single business day following FIX protocol standards:
-- `trade_date`: Trade execution timestamp (ISO 8601 UTC format)
-- `settlement_date`: Settlement date (YYYY-MM-DD)
-- `trade_id`: Unique trade identifier
-- `customer_id`: Reference to customer
-- `account_id`: Investment account used for settlement
-- `order_id`: Order reference
-- `exec_id`: Execution reference
-- `symbol`: Stock symbol
-- `isin`: International Securities Identification Number
-- `side`: FIX protocol side (1=Buy, 2=Sell)
-- `quantity`: Number of shares/units
-- `price`: Price per share/unit
-- `currency`: Trade currency
-- `gross_amount`: Signed gross trade amount (positive for buys, negative for sells)
-- `commission`: Trading commission
-- `net_amount`: Signed net amount after commission
-- `base_currency`: Base currency for reporting (CHF)
-- `base_gross_amount`: Gross amount in CHF
-- `base_net_amount`: Net amount in CHF
-- `fx_rate`: Exchange rate to CHF
-- `market`: Exchange/market (NYSE, LSE, XETRA, etc.)
-- `order_type`: Order type (MARKET, LIMIT, STOP, etc.)
-- `exec_type`: Execution type (NEW, PARTIAL_FILL, FILL, etc.)
-- `time_in_force`: Time in force (DAY, GTC, IOC, etc.)
-- `broker_id`: Executing broker
-- `venue`: Trading venue
-
-### Fixed Income Trade File
-**Filename**: `fixed_income_trades/fixed_income_trades.csv`
-
-Contains fixed income trades (bonds and interest rate swaps) with FRTB risk metrics:
-- `trade_date`: Trade execution timestamp (ISO 8601 UTC format)
-- `settlement_date`: Settlement date (YYYY-MM-DD)
-- `trade_id`: Unique trade identifier
-- `customer_id`: Reference to customer
-- `account_id`: Investment account used for settlement
-- `instrument_type`: BOND or IRS (Interest Rate Swap)
-- `isin`: International Securities Identification Number (for bonds)
-- `issuer`: Bond issuer or swap counterparty
-- `issuer_type`: SOVEREIGN, CORPORATE, or SUPRANATIONAL
-- `currency`: Trade currency (CHF, EUR, USD, GBP)
-- `notional`: Notional amount in trade currency
-- `price`: Bond price (as percentage of par) or swap rate
-- `accrued_interest`: Accrued interest amount (bonds only)
-- `coupon_rate`: Annual coupon rate (bonds) or fixed rate (swaps)
-- `maturity_date`: Instrument maturity date
-- `duration`: Modified duration in years (interest rate sensitivity)
-- `dv01`: Dollar Value of 1 basis point move (CHF)
-- `credit_rating`: Credit rating (AAA to CCC for bonds)
-- `credit_spread_bps`: Credit spread in basis points
-- `floating_rate_index`: Floating rate index for swaps (SARON, EURIBOR, SOFR, SONIA)
-- `base_currency`: Base currency for reporting (CHF)
-- `base_notional`: Notional amount in CHF
-- `base_total_value`: Total trade value in CHF
-- `fx_rate`: Exchange rate to CHF
-- `liquidity_score`: Liquidity score (1-10) for NMRF classification
-
-### Commodity Trade File
-**Filename**: `commodity_trades/commodity_trades.csv`
-
-Contains commodity trades across multiple asset classes with risk metrics:
-- `trade_date`: Trade execution timestamp (ISO 8601 UTC format)
-- `settlement_date`: Settlement/delivery date (YYYY-MM-DD)
-- `trade_id`: Unique trade identifier
-- `customer_id`: Reference to customer
-- `account_id`: Investment account used for settlement
-- `commodity_type`: ENERGY, PRECIOUS_METAL, BASE_METAL, or AGRICULTURAL
-- `commodity_name`: Specific commodity (e.g., Crude Oil WTI, Gold, Copper)
-- `commodity_code`: Standard commodity code
-- `contract_type`: SPOT, FUTURE, FORWARD, or SWAP
-- `quantity`: Quantity traded
-- `unit`: Unit of measure (barrels, troy ounces, metric tons, bushels)
-- `price`: Price per unit in trade currency
-- `currency`: Trade currency (USD, EUR, GBP, CHF)
-- `contract_size`: Standard contract size
-- `num_contracts`: Number of contracts
-- `delivery_month`: Delivery month (YYYY-MM)
-- `delivery_location`: Delivery location/hub
-- `delta`: Price sensitivity (CHF per unit price change)
-- `spot_price`: Current spot price
-- `forward_price`: Forward/futures price
-- `volatility`: Price volatility percentage
-- `exchange`: Trading exchange (CME, ICE, LME, NYMEX, CBOT)
-- `base_currency`: Base currency for reporting (CHF)
-- `base_total_value`: Total trade value in CHF
-- `fx_rate`: Exchange rate to CHF
-- `liquidity_score`: Liquidity score (1-10) for NMRF classification
-
-## Anomaly Types
-
-The tool generates several types of suspicious transaction patterns:
-
-1. **Large Amount Transactions**: Amounts significantly higher than normal patterns
-2. **High Frequency**: Unusually high number of transactions in short periods
-3. **Suspicious Counterparties**: Transactions with shell companies, offshore accounts
-4. **Round Amount Transactions**: Suspicious round numbers (10000, 50000, etc.)
-5. **Off-Hours Transactions**: Transactions outside normal business hours or on weekends
-6. **Rapid Succession**: Multiple large transactions in quick succession
-7. **New Beneficiary Large**: Large transfers to previously unknown counterparties
-
-## Configuration
-
-The tool uses a configuration system that can be customized through command line arguments or by modifying the `config.py` file directly.
-
-### Key Configuration Parameters
-
-- **Customer Count**: Number of customers to simulate
-- **Anomaly Percentage**: Percentage of customers that will exhibit suspicious behavior
-- **Generation Period**: Time span for transaction generation (default: 19 months for proper dormancy and churn testing)
-- **Transaction Frequency**: Average number of transactions per customer per month
-- **Amount Ranges**: Minimum and maximum transaction amounts
-- **Currency Options**: Available currencies for transactions
-
-## Example Output Structure
-
-```
-generated_data/
-├── customers.csv
-├── transactions_2023-01-03.csv
-├── transactions_2023-01-04.csv
-├── ...
-├── transactions_2024-12-30.csv
-└── generation_summary.txt
-```
-
-## Data Characteristics
-
-### Realistic Patterns
-- **Business Hours**: Most transactions occur during 9 AM - 5 PM
-- **Weekday Focus**: Primarily business day transactions
-- **Amount Distribution**: Log-normal distribution for realistic amount spread
-- **Customer Onboarding**: Varied onboarding dates with most customers pre-existing
-- **Settlement Timing**: Realistic value dates based on transaction type, amount, and currency:
-  - Small transactions (< $1,000): Usually same-day or next business day settlement
-  - Medium transactions ($1,000-$10,000): 0-2 business days settlement
-  - Large transactions (> $10,000): May require 0-3 business days for verification
-  - International transactions: Additional 1-2 day delays for non-USD currencies
-  - Weekend handling: Value dates skip weekends automatically
-
-### Anomaly Patterns
-- **Temporal Clustering**: Anomalies occur in concentrated time periods
-- **Amount Escalation**: Gradual increase in suspicious transaction amounts
-- **Pattern Mixing**: Multiple anomaly types can occur for the same customer
-- **Realistic Timing**: Even anomalous transactions follow some business patterns
-
-## Technical Details
-
-### Dependencies
-- **Faker**: Generates realistic customer data (names, addresses, dates)
-- **NumPy**: Provides log-normal distribution for realistic transaction amounts
-- **Standard Library**: Uses built-in Python modules for core functionality
-
-### Performance
-- Generates approximately 1000 transactions per second
-- Memory usage scales linearly with customer count
-- Optimized for datasets up to 10,000 customers
+---
 
 ## Troubleshooting
 
-### Common Issues and Solutions
+### Quick Fixes
 
-#### **Data Generation Issues**
-```bash
-# Error: "ModuleNotFoundError: No module named 'faker'"
-# Solution: Ensure virtual environment is set up and dependencies installed
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+| Issue | Solution |
+|-------|----------|
+| `ModuleNotFoundError: 'faker'` | `python -m venv venv && source venv/bin/activate && pip install -r requirements.txt` |
+| `Customer file not found` | Generate data first: `./data_generator.sh 100 --clean` |
+| `Connection not found` | Add connection: `snow connection add <my-sf-connection>` |
+| `Database does not exist` | Create it: `snow sql -c <connection> -q "CREATE DATABASE AAA_DEV_SYNTHETIC_BANK;"` |
+| `Tag does not exist` | Deploy will create automatically, or manually: `CREATE TAG SENSITIVITY_LEVEL;` |
+| `Stream has no data` | Re-upload: `./upload-data.sh --CONNECTION_NAME=<connection>` |
 
-# Error: "Customer file not found"
-# Solution: Ensure you run data generation before deployment
-./data_generator.sh 100 --clean
+### Data Quality Validation
 
-# Error: "Invalid arguments: Number of customers must be positive"
-# Solution: Use valid customer count
-./data_generator.sh 100  # Valid
-./data_generator.sh -5   # Invalid (negative numbers not allowed)
-```
-
-#### **Snowflake Connection Issues**
-```bash
-# Error: "Connection not found"
-# Solution: Add your connection first
-snow connection add <my-sf-connection>
-
-# Error: "Database does not exist"
-# Solution: Create database first
-snow sql -c <my-sf-connection> -q "CREATE DATABASE AAA_DEV_SYNTHETIC_BANK;"
-```
-
-#### **Deployment Issues**
-```bash
-# Error: "SQL compilation error: Tag 'SENSITIVITY_LEVEL' does not exist"
-# Solution: Create the tag first
-snow sql -c <my-sf-connection> -q "CREATE TAG SENSITIVITY_LEVEL;"
-
-# Error: "Stream has no data"
-# Solution: Check if data was uploaded successfully
-./upload-data.sh --CONNECTION_NAME=<my-sf-connection>
-```
-
-#### **Performance Issues**
-```bash
-# For large datasets (1000+ customers):
-# 1. Increase Snowflake warehouse size in your connection settings
-# 2. The data_generator.sh script is optimized for parallel processing
-
-# Generate large dataset
-./data_generator.sh 1000 --clean
-
-# For very large datasets, monitor progress and adjust parameters in data_generator.sh if needed
-# See DATA_GENERATOR_USAGE.md for advanced main.py usage with custom parallel workers
-```
-
-### **Data Quality Validation**
 ```sql
--- Check customer data quality
-SELECT COUNT(*) as customer_count FROM CRMI_CUSTOMER;
-SELECT COUNT(*) as account_count FROM ACCI_ACCOUNT;
-SELECT COUNT(*) as transaction_count FROM PAYI_TRANSACTION;
+-- Quick counts
+SELECT COUNT(*) as customers FROM CRMI_RAW_TB_CUSTOMER;
+SELECT COUNT(*) as accounts FROM ACCI_ACCOUNT;
+SELECT COUNT(*) as transactions FROM PAYI_TRANSACTION;
 
--- Check for data completeness
+-- Anomaly distribution
 SELECT 
-    COUNT(*) as total_customers,
-    COUNT(CASE WHEN has_anomaly = true THEN 1 END) as anomalous_customers,
-    ROUND(COUNT(CASE WHEN has_anomaly = true THEN 1 END) * 100.0 / COUNT(*), 2) as anomaly_percentage
-FROM CRMI_CUSTOMER;
+    COUNT(*) as total,
+    COUNT(CASE WHEN has_anomaly THEN 1 END) as anomalous,
+    ROUND(100.0 * COUNT(CASE WHEN has_anomaly THEN 1 END) / COUNT(*), 2) as anomaly_pct
+FROM CRMI_RAW_TB_CUSTOMER;
 ```
+
+---

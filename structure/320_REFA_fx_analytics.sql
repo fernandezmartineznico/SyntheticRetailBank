@@ -27,10 +27,10 @@
 -- └─ REFRESH STRATEGY:
 --    ├─ TARGET_LAG: 1 hour (aligned with operational requirements)
 --    ├─ WAREHOUSE: MD_TEST_WH
---    └─ AUTO-REFRESH: Based on source table changes from REF_RAW_001.REFI_FX_RATES
+--    └─ AUTO-REFRESH: Based on source table changes from REF_RAW_001.REFI_RAW_TB_FX_RATES
 --
 -- DATA ARCHITECTURE:
--- Raw FX Rates (REF_RAW_001.REFI_FX_RATES) → Aggregation (REF_AGG_001.REFA_AGG_DT_FX_RATES_ENHANCED) → Analytics
+-- Raw FX Rates (REF_RAW_001.REFI_RAW_TB_FX_RATES) → Aggregation (REF_AGG_001.REFA_AGG_DT_FX_RATES_ENHANCED) → Analytics
 --
 -- SUPPORTED CURRENCIES:
 -- - CHF (Swiss Franc) - Bank's base currency
@@ -38,7 +38,7 @@
 -- - Additional currencies as per business requirements
 --
 -- RELATED SCHEMAS:
--- - REF_RAW_001: Source FX rates data (REFI_FX_RATES)
+-- - REF_RAW_001: Source FX rates data (REFI_RAW_TB_FX_RATES)
 -- - PAY_AGG_001: Payment analytics using FX rates for currency conversion
 -- - CRM_AGG_001: Customer analytics with multi-currency support
 -- ============================================================
@@ -124,7 +124,7 @@ WITH fx_rates_base AS (
         
         CREATED_AT
         
-    FROM REF_RAW_001.REFI_FX_RATES
+    FROM REF_RAW_001.REFI_RAW_TB_FX_RATES
 ),
 
 fx_rates_with_trends AS (
@@ -237,7 +237,7 @@ SELECT
     -- Current Rate Status
     CASE 
         WHEN DATE = CURRENT_DATE() THEN TRUE
-        WHEN DATE = (SELECT MAX(DATE) FROM REF_RAW_001.REFI_FX_RATES) THEN TRUE
+        WHEN DATE = (SELECT MAX(DATE) FROM REF_RAW_001.REFI_RAW_TB_FX_RATES) THEN TRUE
         ELSE FALSE
     END AS IS_CURRENT_RATE,
     
@@ -320,14 +320,14 @@ ORDER BY FROM_CURRENCY, TO_CURRENCY, DATE DESC;
 -- ALTER DYNAMIC TABLE REFA_AGG_DT_FX_RATES_ENHANCED REFRESH;
 --
 -- DATA REQUIREMENTS:
--- - Source table REF_RAW_001.REFI_FX_RATES must contain FX rate data
+-- - Source table REF_RAW_001.REFI_RAW_TB_FX_RATES must contain FX rate data
 -- - FX rate CSV files must be uploaded to stage and loaded
 -- - Raw layer must be populated before aggregation layer can function
 --
 -- MONITORING:
 -- - Dynamic table refresh status: SELECT * FROM TABLE(INFORMATION_SCHEMA.DYNAMIC_TABLE_REFRESH_HISTORY()) WHERE NAME = 'REFA_AGG_DT_FX_RATES_ENHANCED';
 -- - FX data coverage: SELECT COUNT(*) as total_rates, COUNT(DISTINCT CURRENCY_PAIR) as unique_pairs FROM REFA_AGG_DT_FX_RATES_ENHANCED;
--- - Data consistency check: Compare counts with raw layer SELECT COUNT(*) FROM REF_RAW_001.REFI_FX_RATES;
+-- - Data consistency check: Compare counts with raw layer SELECT COUNT(*) FROM REF_RAW_001.REFI_RAW_TB_FX_RATES;
 --
 -- PERFORMANCE OPTIMIZATION:
 -- - Monitor warehouse usage during refresh periods

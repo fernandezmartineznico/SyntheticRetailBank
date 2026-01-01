@@ -8,19 +8,21 @@
 # 1. Deploys all SQL files in the structure/ folder to Snowflake
 # 2. Automatically uploads generated data to appropriate stages
 # 3. Activates processing tasks for immediate operation
+# 4. Deploys all Snowflake notebooks automatically
 #
 # Features:
 # - Complete dependency-aware SQL deployment
 # - Automatic data upload to correct stages
 # - Task activation and monitoring
+# - Automatic notebook deployment to Snowflake
 # - Dry run mode for testing
 # - Single file debugging support
 #
 # Usage:
-#   ./deploy-structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=my_connection
+#   ./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=my_connection
 #
 # Example:
-#   ./deploy-structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
+#   ./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
 # =============================================================================
 
 set -e
@@ -64,7 +66,7 @@ if [[ -z "$DATABASE" || -z "$CONNECTION_NAME" ]]; then
   echo "  --DATABASE=...        Target database name"
   echo "  --CONNECTION_NAME=... Snowflake connection name"
   echo "  --SQL_DIR=...         Path to SQL files (default: ./structure)"
-  echo "  --FILE=...            Test a single SQL file (e.g., 031_ICGI_swift_messages.sql)"
+  echo "  --FILE=...            Test a single SQL file (e.g., 035_ICGI_swift_messages.sql)"
   echo "  --DRY_RUN            Show what would be executed without running"
   exit 1
 fi
@@ -195,6 +197,23 @@ else
   echo "🎉 All SQL scripts executed successfully!"
   
   # =============================================================================
+  # NOTEBOOK DEPLOYMENT NOTE
+  # =============================================================================
+  # Notebooks will be automatically deployed after data upload completes
+  if [[ -z "$SINGLE_FILE" ]]; then
+    NOTEBOOKS_DIR="$BASE_DIR/notebooks"
+    if [[ -d "$NOTEBOOKS_DIR" ]]; then
+      NOTEBOOK_COUNT=$(find "$NOTEBOOKS_DIR" -maxdepth 1 -name "*.ipynb" -type f 2>/dev/null | wc -l | tr -d ' ')
+      
+      if [[ $NOTEBOOK_COUNT -gt 0 ]]; then
+        echo ""
+        echo "📓 Found $NOTEBOOK_COUNT notebook(s) - will deploy automatically after data processing"
+        echo ""
+      fi
+    fi
+  fi
+  
+  # =============================================================================
   # AUTOMATIC DATA UPLOAD AFTER SUCCESSFUL DEPLOYMENT
   # =============================================================================
   # Only trigger data upload for full deployments, not single file tests
@@ -272,19 +291,62 @@ else
         
         echo ""
         echo "🎯 END-TO-END DEPLOYMENT SUMMARY:"
-        echo "   Database & schemas created"
-        echo "   All SQL objects deployed"
-        echo "   Generated data uploaded to stages"
-        echo "   All 14 tasks executed (data loaded)"
-          echo "   All 55 dynamic tables refreshed (data processed)"
+        echo "   ✓ Database & schemas created"
+        echo "   ✓ All SQL objects deployed (incl. semantic views)"
+        echo "   ✓ Generated data uploaded to stages"
+        echo "   ✓ All 14 tasks executed (data loaded)"
+        echo "   ✓ All 55 dynamic tables refreshed (data processed)"
+        echo ""
+        
+        # =============================================================================
+        # AUTOMATIC NOTEBOOK DEPLOYMENT
+        # =============================================================================
+        echo ""
+        echo "📓 DEPLOYING SNOWFLAKE NOTEBOOKS"
+        echo "================================="
+        echo "🚀 Data processing complete! Now deploying notebooks..."
+        echo ""
+        
+        # Check if deploy_notebooks.sh exists
+        if [[ -f "./deploy_notebooks.sh" ]]; then
+          echo "📋 Found deploy_notebooks.sh - Starting notebook deployment..."
+          echo ""
+          
+          # Execute the notebook deployment script
+          echo "🔄 Executing: ./deploy_notebooks.sh --DATABASE=$DATABASE --CONNECTION_NAME=$CONNECTION_NAME --SCHEMA=PUBLIC"
+          echo ""
+          
+          # Run the notebook deployment script
+          ./deploy_notebooks.sh --DATABASE="$DATABASE" --CONNECTION_NAME="$CONNECTION_NAME" --SCHEMA=PUBLIC
+          
+          if [[ $? -eq 0 ]]; then
+            echo ""
+            echo "NOTEBOOK DEPLOYMENT COMPLETED!"
+            echo ""
+          else
+            echo ""
+            echo "⚠️  Notebook deployment failed - notebooks may need manual deployment"
+            echo "💡 You can retry the deployment manually:"
+            echo "   ./deploy_notebooks.sh --DATABASE=$DATABASE --CONNECTION_NAME=$CONNECTION_NAME --SCHEMA=PUBLIC"
+            echo ""
+          fi
+        else
+          echo "⚠️  deploy_notebooks.sh not found - Skipping notebook deployment"
+          echo "💡 To deploy notebooks manually, run:"
+          echo "   ./deploy_notebooks.sh --DATABASE=$DATABASE --CONNECTION_NAME=$CONNECTION_NAME --SCHEMA=PUBLIC"
+          echo ""
+        fi
+        
         echo ""
         echo "🚀 Your synthetic bank is now fully operational with data loaded!"
         echo ""
         echo "Next steps:"
-        echo "1. Verify data loaded: SELECT COUNT(*) FROM CRM_RAW_001.CRMI_CUSTOMER;"
+        echo "1. Verify data loaded: SELECT COUNT(*) FROM CRM_RAW_001.CRMI_RAW_TB_CUSTOMER;"
         echo "2. Check aggregations: SELECT * FROM CRM_AGG_001.CRMA_AGG_DT_CUSTOMER_360 LIMIT 10;"
         echo "3. Explore reports: SELECT * FROM REP_AGG_001.REPP_AGG_DT_CUSTOMER_SUMMARY LIMIT 10;"
         echo "4. Monitor tasks: SHOW TASKS IN DATABASE $DATABASE;"
+        echo "5. Check semantic views: SHOW VIEWS LIKE '7%' IN DATABASE $DATABASE;"
+        echo "6. Open notebooks: Snowsight → Projects → Notebooks → $DATABASE.PUBLIC"
       else
         echo ""
         echo "❌ Data upload failed! Please check the upload script output above."

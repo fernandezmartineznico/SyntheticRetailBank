@@ -9,70 +9,73 @@ The DDL is organized by **business domain** to ensure a clear separation of conc
 
 ```
 structure/
-├── 000_database_setup.sql               # Database and warehouse creation
-├── 001_get_listings.sql                 # Snowflake Data Exchange: Global Sanctions Data Setup
-├── 002_SANC_sanction_data.sql          # Sanctions data integration
-├── 010_CRMI_customer_master.sql        # CRM Raw: Customer Master Data & Exposed Person System
-├── 011_ACCI_accounts.sql               # CRM Raw: Account Master Data
-├── 020_REFI_fx_rates.sql               # REF Raw: FX Rates Reference Data
-├── 030_PAYI_transactions.sql           # PAY Raw: Payment Transactions
-├── 031_ICGI_swift_messages.sql         # PAY Raw: SWIFT ISO20022 Message Processing
-├── 040_EQTI_equity_trades.sql          # EQT Raw: Equity Trading
-├── 050_FIII_fixed_income.sql           # FII Raw: Fixed Income Trading
-├── 055_CMDI_commodities.sql            # CMD Raw: Commodity Trading
-├── 060_LOAI_loans_documents.sql        # LOA Raw: Loan & Document Processing
-├── 310_CRMA_customer_360.sql           # CRM Agg: Customer 360° & Address History (SCD Type 2)
-├── 311_ACCA_accounts_agg.sql           # CRM Agg: Account Aggregation Layer
-├── 312_CRMA_LIFECYCLE.sql              # CRM Agg: Customer Lifecycle & Churn Prediction
-├── 320_REFA_fx_analytics.sql           # REF Agg: FX Rates Analytics & Volatility
-├── 330_PAYA_anomaly_detection.sql      # PAY Agg: Payment Anomaly Detection & Account Balances
-├── 331_ICGA_swift_lifecycle.sql        # PAY Agg: SWIFT Message Aggregation & Lifecycle
-├── 340_EQTA_equity_analytics.sql       # EQT Agg: Equity Trading Analytics & Portfolio
-├── 350_FIIA_fixed_income_analytics.sql # FII Agg: Fixed Income Analytics & Risk Metrics
-├── 355_CMDA_commodity_analytics.sql    # CMD Agg: Commodity Analytics & Delta Risk
-├── 500_REPP_core_reporting.sql         # REP Agg: Core Reporting & Analytics
-├── 510_REPP_equity_reporting.sql       # REP Agg: Equity Trading Reporting
-├── 520_REPP_credit_risk.sql            # REP Agg: Credit Risk & IRB Reporting
-├── 525_REPP_frtb_market_risk.sql       # REP Agg: FRTB Market Risk Capital Calculations
-├── 540_REPP_bcbs239_compliance.sql     # REP Agg: BCBS 239 Risk Data Aggregation
-├── 600_REPP_portfolio_performance.sql  # REP Agg: Portfolio Performance & TWR
-├── 700_semantic_view.sql               # Business-friendly semantic view
-└── README_DEPLOYMENT.md                # This deployment guide
+ 000_database_setup.sql # Database and warehouse creation
+ 001_get_listings.sql # Snowflake Data Exchange: Global Sanctions Data Setup
+ 002_SANC_sanction_data.sql # Sanctions data integration
+ 010_CRMI_customer_master.sql # CRM Raw: Customer Master Data & Exposed Person System
+ 011_ACCI_accounts.sql # CRM Raw: Account Master Data
+ 015_EMPI_employees.sql # CRM Raw: Employee Master Data & Client Assignments
+ 020_REFI_fx_rates.sql # REF Raw: FX Rates Reference Data
+ 030_PAYI_transactions.sql # PAY Raw: Payment Transactions
+ 035_ICGI_swift_messages.sql # PAY Raw: SWIFT ISO20022 Message Processing
+ 040_EQTI_equity_trades.sql # EQT Raw: Equity Trading
+ 050_FIII_fixed_income.sql # FII Raw: Fixed Income Trading
+ 055_CMDI_commodities.sql # CMD Raw: Commodity Trading
+ 060_LOAI_loans_documents.sql # LOA Raw: Loan & Document Processing
+ 311_ACCA_accounts_agg.sql # CRM Agg: Account Aggregation Layer
+ 312_CRMA_LIFECYCLE.sql # CRM Agg: Customer Lifecycle & Churn Prediction
+ 415_EMPA_employee_analytics.sql # CRM Agg: Employee Analytics & Hierarchy Views
+ 320_REFA_fx_analytics.sql # REF Agg: FX Rates Analytics & Volatility
+ 330_PAYA_anomaly_detection.sql # PAY Agg: Payment Anomaly Detection & Account Balances
+ 330_PAYA_transaction_summary.sql # PAY Agg: Transaction Summary for Customer 360
+ 335_ICGA_swift_lifecycle.sql # PAY Agg: SWIFT Message Aggregation & Lifecycle
+ 410_CRMA_customer_360.sql # CRM Agg: Customer 360° with Balances & Transactions
+ 340_EQTA_equity_analytics.sql # EQT Agg: Equity Trading Analytics & Portfolio
+ 350_FIIA_fixed_income_analytics.sql # FII Agg: Fixed Income Analytics & Risk Metrics
+ 355_CMDA_commodity_analytics.sql # CMD Agg: Commodity Analytics & Delta Risk
+ 500_REPP_core_reporting.sql # REP Agg: Core Reporting & Analytics
+ 510_REPP_equity_reporting.sql # REP Agg: Equity Trading Reporting
+ 520_REPP_credit_risk.sql # REP Agg: Credit Risk & IRB Reporting
+ 525_REPP_frtb_market_risk.sql # REP Agg: FRTB Market Risk Capital Calculations
+ 540_REPP_bcbs239_compliance.sql # REP Agg: BCBS 239 Risk Data Aggregation
+ 600_REPP_portfolio_performance.sql # REP Agg: Portfolio Performance & TWR
+ 700_semantic_view.sql # Business-friendly semantic view
+ README_DEPLOYMENT.md # This deployment guide
 ```
 
 ## Object Prefix Matrix
 
 ### Prefix per **Data Architecture Layers:**
 
-| **Layer**                           | **Schemas**                                                                  | **Schema Object - Prefixes** <br/> (Tables / View / ...)         |
+| **Layer** | **Schemas** | **Schema Object - Prefixes** <br/> (Tables / View /...) |
 |-------------------------------------|------------------------------------------------------------------------------|------------------------------------------------------------------|
-| **🟢 DAP** <br/> Data Products      |                                                                |                                                             |
-| **🟡 AGG** <br/> Aggregation Layer  | CRM_AGG_001<br/>PAY_AGG_001<br/>EQT_AGG_001<br/>FII_AGG_001<br/>CMD_AGG_001<br/>REP_AGG_001 | CRMA_<br/>ACCA_<br/>PAYA_<br/>ICGA_<br/>EQTA_<br/>FIIA_<br/>CMDA_<br/>REPP_ |
-| **🔴 RAW** <br/> RAW / Landing zone | CRM_RAW_001<br/>REF_RAW_001<br/>PAY_RAW_001<br/>EQT_RAW_001<br/>FII_RAW_001<br/>CMD_RAW_001 | CRMI_<br/>ACCI_<br/>REFI_<br/>PAYI_<br/>EQTI_<br/>ICGI_<br/>FIII_<br/>CMDI_ |
+| ** DAP** <br/> Data Products | | |
+| ** AGG** <br/> Aggregation Layer | CRM_AGG_001<br/>PAY_AGG_001<br/>EQT_AGG_001<br/>FII_AGG_001<br/>CMD_AGG_001<br/>REP_AGG_001 | CRMA_<br/>ACCA_<br/>PAYA_<br/>ICGA_<br/>EQTA_<br/>FIIA_<br/>CMDA_<br/>REPP_ |
+| ** RAW** <br/> RAW / Landing zone | CRM_RAW_001<br/>REF_RAW_001<br/>PAY_RAW_001<br/>EQT_RAW_001<br/>FII_RAW_001<br/>CMD_RAW_001 | CRMI_<br/>ACCI_<br/>REFI_<br/>PAYI_<br/>EQTI_<br/>ICGI_<br/>FIII_<br/>CMDI_ |
 
 
 
 ### ** Naming Convention:**
 
 #### Schema - Naming
-- 1-3 position: Business domain (CRM, PAY, EQT, ICG, REF, REP, ...)
+- 1-3 position: Business domain (CRM, PAY, EQT, ICG, REF, REP,...)
 - 4 position: "_")
-- 5-7 position: data maturity layer (RAW, AGG, ..., DAP)
+- 5-7 position: data maturity layer (RAW, AGG,..., DAP)
 - 8 position: "_")
 - 9-14 position: versioning (V000, +1 = minor changes, +10	= major changes)
 
 
-####  Schema Object - Prefixes (Tables / View / ...)
-- 1-3 position: Business domain (CRM, PAY, EQT, ICG, REF, REP, ...)
+#### Schema Object - Prefixes (Tables / View /...)
+- 1-3 position: Business domain (CRM, PAY, EQT, ICG, REF, REP,...)
 - 4 position: software component with data maturity layer (I=Ingestion/Raw, A=Aggregation, P=Processing/DAP)
 - Examples: 
-  - `CRMI_` = **CRM Ingestion** (RAW layer)
-  - `CRMA_` = **CRM Aggregation** (AGG layer)
-  - `PAYA_` = **PAY Aggregation** (AGG layer)
+ - `CRMI_` = **CRM Ingestion** (RAW layer)
+ - `CRMA_` = **CRM Aggregation** (AGG layer)
+ - `PAYA_` = **PAY Aggregation** (AGG layer)
 
-## 🚀 Deployment Order
+## Deployment Order
 
-**⚠️ CRITICAL: Execute files in the exact order listed below to ensure proper dependencies:**
+** CRITICAL: Execute files in the exact order listed below to ensure proper dependencies:**
 
 ### 1. Database Setup
 ```sql
@@ -157,6 +160,34 @@ structure/
 - **Tables**: `ACCI_ACCOUNTS`
 - **Streams**: `ACCI_STREAM_ACCOUNT_FILES`
 - **Tasks**: `ACCI_TASK_LOAD_ACCOUNTS`
+
+### 3a. Employee Master Data & Client Assignments
+**Business Domain**: `CRM`
+
+```sql
+-- Execute after accounts: Employee hierarchy and client-advisor relationships
+@015_EMPI_employees.sql
+```
+
+**Objects Created:**
+- **Schema**: `CRM_RAW_001`
+- **Stages**: `EMPI_EMPLOYEES`, `EMPI_CLIENT_ASSIGNMENTS`
+- **File Formats**: `EMPI_FF_EMPLOYEE_CSV`, `EMPI_FF_ASSIGNMENT_CSV`
+- **Tables**: `EMPI_EMPLOYEE`, `EMPI_CLIENT_ASSIGNMENT`
+- **Streams**: `EMPI_STREAM_EMPLOYEE_FILES`, `EMPI_STREAM_ASSIGNMENT_FILES`
+- **Tasks**: `EMPI_TASK_LOAD_EMPLOYEES`, `EMPI_TASK_LOAD_ASSIGNMENTS`
+
+**Key Features:**
+- **Employee Hierarchy**: 3-tier structure (Client Advisors, Team Leaders, Super Team Leaders)
+- **Dynamic Scaling**: Advisor count scales with customer base (200 clients/advisor)
+- **Client Assignments**: SCD Type 2 relationship tracking with assignment history
+- **Performance Tracking**: Performance ratings, certifications, languages spoken
+- **Geographic Coverage**: Multi-country deployment with regional management
+- **Self-Referencing Hierarchy**: Manager relationships within employee table
+- **Assignment Reasons**: INITIAL_ONBOARDING, TRANSFER, ESCALATION, REBALANCING
+- **Automated Loading**: Stream-triggered serverless tasks (1-hour schedule)
+
+**Note:** Foreign key to `CRMI_CUSTOMER` is not enforced due to SCD Type 2 composite primary key.
 
 ### 4. FX Rates Reference Data
 **Business Domain**: `REF`
@@ -283,7 +314,7 @@ structure/
 
 ```sql
 -- Execute fifth: SWIFT message processing (raw layer)
-@031_ICGI_swift_messages.sql
+@035_ICGI_swift_messages.sql
 ```
 
 **Objects Created:**
@@ -299,34 +330,97 @@ structure/
 - **XML Processing**: Structured SWIFT message parsing with PARSE_XML()
 - **Stream-Based Automation**: Automatic file detection and processing
 
-##  AGGREGATION LAYER
+## AGGREGATION LAYER
 
-Execute after all raw layer schemas are deployed:
+Execute after all raw layer schemas are deployed.
 
-### 8. Customer 360° Aggregation (SCD Type 2)
+** CRITICAL AGGREGATION LAYER DEPLOYMENT ORDER:**
+
+For Customer 360 and Employee Analytics to work correctly, deploy in this exact sequence:
+
+1. **Account Aggregation** (`311_ACCA_accounts_agg.sql`) - Creates `ACCA_AGG_DT_ACCOUNTS` for account metadata
+2. **Payment Anomaly Detection** (`330_PAYA_anomaly_detection.sql`) - Creates `PAYA_AGG_DT_ACCOUNT_BALANCES` for balance metrics and `PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY` for transaction aggregation
+3. **Customer 360** (`410_CRMA_customer_360.sql`) - Depends on #1 and #2 for complete customer profile (uses direct transaction join for performance)
+4. **Employee Analytics** (`415_EMPA_employee_analytics.sql`) - Depends on #3 for customer metrics in advisor performance views
+
+**Dependency Flow:**
+```
+RAW DATA (ACCI_ACCOUNTS, PAYI_TRANSACTIONS, CRMI_CUSTOMER, CRMI_ADDRESSES)
+ ↓
+ACCOUNT AGGREGATION (311_ACCA_accounts_agg.sql)
+ ↓
+ACCOUNT BALANCES (330_PAYA_anomaly_detection.sql)
+ ↓
+TRANSACTION SUMMARY (330_PAYA_transaction_summary.sql)
+ ↓
+CUSTOMER 360 (410_CRMA_customer_360.sql)
+ ↓
+EMPLOYEE ANALYTICS (415_EMPA_employee_analytics.sql)
+```
+
+---
+
+### 7a. Transaction Summary Aggregation
+**Business Domain**: `PAY`
+
 ```sql
--- Execute eighth: Customer 360° with SCD Type 2 for attributes and addresses
-@310_CRMA_customer_360.sql
+-- Execute BEFORE Customer 360: Pre-aggregated transaction metrics
+@330_PAYA_transaction_summary.sql
+```
+
+**Objects Created:**
+- **Schema**: `PAY_AGG_001`
+- **Dynamic Tables** (merged from 330_PAYA_anomaly_detection.sql):
+  - `PAYA_AGG_DT_TRANSACTION_ANOMALIES` - Behavioral anomaly detection
+  - `PAYA_AGG_DT_ACCOUNT_BALANCES` - Real-time account balances
+  - `PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY` - Pre-aggregated transaction metrics per customer
+
+**Key Features:**
+- **Transaction Metrics**: 12-month and all-time transaction counts by customer
+- **Transaction Types**: Debit/credit breakdown, internal/external transfers
+- **Activity Analysis**: Average monthly transactions, days since last transaction
+- **Engagement Flags**: Dormancy detection (180+ days), high-activity identification (>50 txn/month)
+- **Performance Optimization**: Pre-computed metrics eliminate real-time aggregation overhead
+- **Customer 360 Integration**: Primary source for transaction activity in Customer 360 view
+- **60-Minute Refresh**: Matches Customer 360 refresh cadence for consistency
+
+**Prerequisites:**
+- `030_PAYI_transactions.sql` (raw transaction data)
+- `011_ACCI_accounts.sql` (account master data for customer mapping)
+
+### 8. Customer 360° Aggregation with Balances & Transactions
+**Business Domain**: `CRM`
+
+```sql
+-- Execute AFTER transaction summary and account balances: Customer 360° with financial metrics
+@410_CRMA_customer_360.sql
 ```
 
 **Objects Created:**
 - **Schema**: `CRM_AGG_001`
-- **Dynamic Tables** (6 tables): 
-  - `CRMA_AGG_DT_ADDRESSES_CURRENT` - Latest address per customer (operational view)
-  - `CRMA_AGG_DT_ADDRESSES_HISTORY` - Full address SCD Type 2 with VALID_FROM/VALID_TO (analytical view)
-  - `CRMA_AGG_DT_CUSTOMER_CURRENT` - Latest customer attributes per customer (operational view)
-  - `CRMA_AGG_DT_CUSTOMER_HISTORY` - Full customer attribute SCD Type 2 with VALID_FROM/VALID_TO (analytical view)
-  - `CRMA_AGG_DT_CUSTOMER_LIFECYCLE` - Lifecycle metrics and churn prediction
-  - `CRMA_AGG_DT_CUSTOMER_360` - Comprehensive 360° view combining all customer dimensions
+- **Dynamic Tables** (5 tables): 
+ - `CRMA_AGG_DT_ADDRESSES_CURRENT` - Latest address per customer (operational view)
+ - `CRMA_AGG_DT_ADDRESSES_HISTORY` - Full address SCD Type 2 with VALID_FROM/VALID_TO (analytical view)
+ - `CRMA_AGG_DT_CUSTOMER_CURRENT` - Latest customer attributes per customer (operational view)
+ - `CRMA_AGG_DT_CUSTOMER_HISTORY` - Full customer attribute SCD Type 2 with VALID_FROM/VALID_TO (analytical view)
+ - `CRMA_AGG_DT_CUSTOMER_360` - Comprehensive 360° view with balances, transactions, PEP/sanctions matching
 
 **Key Features:**
 - **Dual SCD Type 2 Implementation**: Complete history tracking for both customer attributes AND addresses
+- **Balance Metrics (Phase 1)**: AUM tracking with `TOTAL_BALANCE`, account type balances (checking, savings, business, investment)
+- **Transaction Metrics (Phase 2)**: Engagement scoring with transaction counts, dormancy flags, activity levels
 - **Customer Attributes History**: Tracks changes in employment, account tier, contact info, risk classification
 - **Address History**: Tracks all address changes with full audit trail
-- **Customer 360° View**: Comprehensive customer view integrating master data, current attributes, current address, accounts, lifecycle, and Exposed Person matching
 - **Exposed Person Matching**: Advanced `EDITDISTANCE` fuzzy matching for compliance screening
-- **Lifecycle Integration**: Current status, churn prediction, and lifecycle stage for operational decision-making
-- **Real-Time Refresh**: 1-hour TARGET_LAG for near-real-time operational queries
+- **Sanctions Screening**: Global sanctions data integration with fuzzy matching and accuracy scoring
+- **Risk Assessment**: Combined PEP, sanctions, and anomaly risk scoring
+- **60-Minute Refresh**: Near-real-time operational queries
+
+**Prerequisites (CRITICAL):**
+1. `311_ACCA_accounts_agg.sql` - Creates `ACCA_AGG_DT_ACCOUNTS` (for account type counts and metadata)
+2. `330_PAYA_anomaly_detection.sql` - Creates `PAYA_AGG_DT_ACCOUNT_BALANCES` (for balance metrics) and `PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY` (for transaction aggregation)
+3. Must deploy in this exact order or Customer 360 will fail
+4. Note: Customer 360 uses direct transaction joins (Option A) for performance, but `PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY` is available as an alternative (Option B)
 
 
 ### 9. Account Aggregation Layer
@@ -344,6 +438,54 @@ Execute after all raw layer schemas are deployed:
 - **Enhanced Metadata**: Account type flags and classification
 - **Processing Metadata**: Aggregation timestamps and source tracking
 
+### 9a. Employee Analytics & Hierarchy (Dynamic Tables + Views)
+**Business Domain**: `CRM`
+
+```sql
+-- Execute AFTER Customer 360: Employee performance and relationship analytics
+@415_EMPA_employee_analytics.sql
+```
+
+**Objects Created:**
+- **Schema**: `CRM_AGG_001`
+- **Hybrid Architecture** (3 Dynamic Tables + 5 Views):
+ - **Dynamic Tables** (Auto-refreshed every 60 minutes):
+ - `EMPA_AGG_DT_ADVISOR_PERFORMANCE` - Client advisor KPIs (AUM, client counts, capacity)
+ - `EMPA_AGG_DT_PORTFOLIO_BY_ADVISOR` - Portfolio valuations by advisor with currency exposure
+ - `EMPA_AGG_DT_TEAM_LEADER_DASHBOARD` - Team aggregations for management reporting
+ - **Views** (Real-time):
+ - `EMPA_AGG_VW_EMPLOYEE_HIERARCHY` - Recursive org chart with full paths and levels
+ - `EMPA_AGG_VW_ORGANIZATIONAL_CHART` - Flat org structure with direct reports
+ - `EMPA_AGG_VW_CURRENT_ASSIGNMENTS` - Active client-advisor relationships with customer metrics
+ - `EMPA_AGG_VW_ASSIGNMENT_HISTORY` - Full assignment audit trail (SCD Type 2)
+ - `EMPA_AGG_VW_WORKLOAD_DISTRIBUTION` - Capacity planning and workload balance analysis
+
+**Why Hybrid Architecture?**
+- **Dynamic Tables**: Heavy aggregations (performance metrics, portfolio valuations) benefit from pre-computation and hourly refresh
+- **Views**: Recursive queries, simple lookups, and audit trails remain as views for real-time accuracy and simplicity
+
+**Key Features:**
+- **AUM Tracking**: Assets Under Management per advisor from `CRMA_AGG_DT_CUSTOMER_360.TOTAL_BALANCE`
+- **Transaction Activity**: Engagement metrics from `CRMA_AGG_DT_CUSTOMER_360` (direct transaction aggregation)
+- **Performance Analytics**: Advisor ranking, portfolio value, client counts, capacity utilization
+- **Workforce Optimization**: Workload distribution, capacity analysis, hiring triggers
+- **Team Management**: Team leader dashboards with aggregated metrics and performance ratings
+- **Compliance**: Assignment history for audit trails and relationship stability tracking
+- **Revenue Projection**: Estimated annual revenue based on 1% AUM fee assumption
+
+**Prerequisites (CRITICAL):**
+1. `410_CRMA_customer_360.sql` - Provides customer balance and transaction metrics
+2. `CRMA_AGG_DT_CUSTOMER_CURRENT` - Current customer attributes (from Customer 360 file)
+3. `015_EMPI_employees.sql` - Employee master data and client assignments
+4. Must deploy after Customer 360 or views will fail
+
+**Business Value:**
+- **Relationship Management**: Track customer-advisor assignments and tenure
+- **Compensation**: Data-driven incentive calculations based on AUM and performance
+- **Capacity Planning**: Identify overloaded advisors and available capacity
+- **Risk Management**: Monitor high-risk client concentration per advisor
+- **Succession Planning**: Performance ratings and organizational hierarchy for talent management
+
 ### 10. Payment Anomaly Detection & Account Balances
 ```sql
 -- Execute tenth: Payment analytics and anomaly detection
@@ -353,8 +495,8 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `PAY_AGG_001`
 - **Dynamic Tables**: 
-  - `PAYA_AGG_DT_TRANSACTION_ANOMALIES` - Behavioral anomaly detection
-  - `PAYA_AGG_DT_ACCOUNT_BALANCES` - Real-time account balances with FX conversion
+ - `PAYA_AGG_DT_TRANSACTION_ANOMALIES` - Behavioral anomaly detection
+ - `PAYA_AGG_DT_ACCOUNT_BALANCES` - Real-time account balances with FX conversion
 
 **Key Features:**
 - **Behavioral Anomaly Detection**: Multi-dimensional transaction analysis
@@ -365,15 +507,15 @@ Execute after all raw layer schemas are deployed:
 ### 11. SWIFT Message Aggregation
 ```sql
 -- Execute sixth: SWIFT message aggregation (PAY_AGG_001)
-@331_ICGA_swift_lifecycle.sql
+@335_ICGA_swift_lifecycle.sql
 ```
 
 **Objects Created:**
 - **Schema**: `PAY_AGG_001`
 - **Dynamic Tables**: 
-  - `ICGA_AGG_DT_SWIFT_PACS008` - Parsed SWIFT PACS.008 customer credit transfer instructions
-  - `ICGA_AGG_DT_SWIFT_PACS002` - Parsed SWIFT PACS.002 payment status reports and acknowledgments
-  - `ICGA_AGG_DT_SWIFT_PAYMENT_LIFECYCLE` - Complete payment lifecycle view joining instructions with status reports
+ - `ICGA_AGG_DT_SWIFT_PACS008` - Parsed SWIFT PACS.008 customer credit transfer instructions
+ - `ICGA_AGG_DT_SWIFT_PACS002` - Parsed SWIFT PACS.002 payment status reports and acknowledgments
+ - `ICGA_AGG_DT_SWIFT_PAYMENT_LIFECYCLE` - Complete payment lifecycle view joining instructions with status reports
 
 ### 12. Equity Trading Aggregation & Analytics
 ```sql
@@ -384,9 +526,9 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `EQT_AGG_001`
 - **Dynamic Tables**: 
-  - `EQTA_AGG_DT_TRADE_SUMMARY` - Enriched trade-level analytics with metadata and classifications
-  - `EQTA_AGG_DT_PORTFOLIO_POSITIONS` - Current holdings and positions per account with P&L
-  - `EQTA_AGG_DT_CUSTOMER_ACTIVITY` - Customer trading behavior and activity metrics
+ - `EQTA_AGG_DT_TRADE_SUMMARY` - Enriched trade-level analytics with metadata and classifications
+ - `EQTA_AGG_DT_PORTFOLIO_POSITIONS` - Current holdings and positions per account with P&L
+ - `EQTA_AGG_DT_CUSTOMER_ACTIVITY` - Customer trading behavior and activity metrics
 
 **Key Features:**
 - **Trade Analytics**: Comprehensive trade-level view with execution quality metrics
@@ -404,11 +546,11 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `FII_AGG_001`
 - **Dynamic Tables** (5 tables):
-  - `FIIA_AGG_DT_TRADE_SUMMARY` - Enriched trade analytics with risk metrics
-  - `FIIA_AGG_DT_PORTFOLIO_POSITIONS` - Current holdings by customer/issuer
-  - `FIIA_AGG_DT_DURATION_ANALYSIS` - Interest rate risk metrics (duration, DV01)
-  - `FIIA_AGG_DT_CREDIT_EXPOSURE` - Credit risk by rating and issuer type
-  - `FIIA_AGG_DT_YIELD_CURVE` - Yield curve construction by currency
+ - `FIIA_AGG_DT_TRADE_SUMMARY` - Enriched trade analytics with risk metrics
+ - `FIIA_AGG_DT_PORTFOLIO_POSITIONS` - Current holdings by customer/issuer
+ - `FIIA_AGG_DT_DURATION_ANALYSIS` - Interest rate risk metrics (duration, DV01)
+ - `FIIA_AGG_DT_CREDIT_EXPOSURE` - Credit risk by rating and issuer type
+ - `FIIA_AGG_DT_YIELD_CURVE` - Yield curve construction by currency
 
 **Key Features:**
 - **Interest Rate Risk**: Duration and DV01 analytics for rate sensitivity
@@ -426,11 +568,11 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `CMD_AGG_001`
 - **Dynamic Tables** (5 tables):
-  - `CMDA_AGG_DT_TRADE_SUMMARY` - Enriched trade analytics with risk metrics
-  - `CMDA_AGG_DT_PORTFOLIO_POSITIONS` - Current holdings by commodity type
-  - `CMDA_AGG_DT_DELTA_EXPOSURE` - Price risk exposure by commodity class
-  - `CMDA_AGG_DT_VOLATILITY_ANALYSIS` - Volatility metrics and regime classification
-  - `CMDA_AGG_DT_DELIVERY_SCHEDULE` - Physical delivery tracking and logistics
+ - `CMDA_AGG_DT_TRADE_SUMMARY` - Enriched trade analytics with risk metrics
+ - `CMDA_AGG_DT_PORTFOLIO_POSITIONS` - Current holdings by commodity type
+ - `CMDA_AGG_DT_DELTA_EXPOSURE` - Price risk exposure by commodity class
+ - `CMDA_AGG_DT_VOLATILITY_ANALYSIS` - Volatility metrics and regime classification
+ - `CMDA_AGG_DT_DELIVERY_SCHEDULE` - Physical delivery tracking and logistics
 
 **Key Features:**
 - **Delta Risk**: Price sensitivity aggregation by commodity class
@@ -448,15 +590,15 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `REP_AGG_001`
 - **Dynamic Tables** (10 core tables): 
-  - `REPP_AGG_DT_CUSTOMER_SUMMARY` - Comprehensive customer profiling with transaction statistics
-  - `REPP_AGG_DT_DAILY_TRANSACTION_SUMMARY` - Daily transaction volume and pattern analysis
-  - `REPP_AGG_DT_CURRENCY_EXPOSURE_CURRENT` - Current foreign exchange exposure monitoring
-  - `REPP_AGG_DT_CURRENCY_EXPOSURE_HISTORY` - Historical FX exposure trends
-  - `REPP_AGG_DT_CURRENCY_SETTLEMENT_EXPOSURE` - Settlement timing and liquidity risk
-  - `REPP_AGG_DT_ANOMALY_ANALYSIS` - Customer-level anomaly detection
-  - `REPP_AGG_DT_HIGH_RISK_PATTERNS` - High-risk transaction pattern detection
-  - `REPP_AGG_DT_SETTLEMENT_ANALYSIS` - Settlement timing analysis
-  - `REPP_AGG_DT_LIFECYCLE_ANOMALIES` - Lifecycle event correlation with transaction anomalies for AML detection
+ - `REPP_AGG_DT_CUSTOMER_SUMMARY` - Comprehensive customer profiling with transaction statistics
+ - `REPP_AGG_DT_DAILY_TRANSACTION_SUMMARY` - Daily transaction volume and pattern analysis
+ - `REPP_AGG_DT_CURRENCY_EXPOSURE_CURRENT` - Current foreign exchange exposure monitoring
+ - `REPP_AGG_DT_CURRENCY_EXPOSURE_HISTORY` - Historical FX exposure trends
+ - `REPP_AGG_DT_CURRENCY_SETTLEMENT_EXPOSURE` - Settlement timing and liquidity risk
+ - `REPP_AGG_DT_ANOMALY_ANALYSIS` - Customer-level anomaly detection
+ - `REPP_AGG_DT_HIGH_RISK_PATTERNS` - High-risk transaction pattern detection
+ - `REPP_AGG_DT_SETTLEMENT_ANALYSIS` - Settlement timing analysis
+ - `REPP_AGG_DT_LIFECYCLE_ANOMALIES` - Lifecycle event correlation with transaction anomalies for AML detection
 
 **Key Features:**
 - **Customer Analytics**: 360° customer view with transaction profiling
@@ -474,10 +616,10 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `REP_AGG_001`
 - **Dynamic Tables** (4 tables): 
-  - `REPP_AGG_DT_EQUITY_SUMMARY` - Customer equity trading activity summary
-  - `REPP_AGG_DT_EQUITY_POSITIONS` - Position summary by security
-  - `REPP_AGG_DT_EQUITY_CURRENCY_EXPOSURE` - FX exposure from equity trades
-  - `REPP_AGG_DT_HIGH_VALUE_EQUITY_TRADES` - Large trade compliance monitoring
+ - `REPP_AGG_DT_EQUITY_SUMMARY` - Customer equity trading activity summary
+ - `REPP_AGG_DT_EQUITY_POSITIONS` - Position summary by security
+ - `REPP_AGG_DT_EQUITY_CURRENCY_EXPOSURE` - FX exposure from equity trades
+ - `REPP_AGG_DT_HIGH_VALUE_EQUITY_TRADES` - Large trade compliance monitoring
 
 **Key Features:**
 - **Trading Activity**: Customer-level trading statistics and profiling
@@ -494,11 +636,11 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `REP_AGG_001`
 - **Dynamic Tables** (5 tables): 
-  - `REPP_AGG_DT_IRB_CUSTOMER_RATINGS` - Customer-level credit ratings and risk parameters
-  - `REPP_AGG_DT_IRB_PORTFOLIO_METRICS` - Portfolio-level risk aggregation
-  - `REPP_AGG_DT_CUSTOMER_RATING_HISTORY` - Historical rating tracking (SCD Type 2)
-  - `REPP_AGG_DT_IRB_RWA_SUMMARY` - Risk Weighted Assets summary
-  - `REPP_AGG_DT_IRB_RISK_TRENDS` - Risk parameter trends and model validation
+ - `REPP_AGG_DT_IRB_CUSTOMER_RATINGS` - Customer-level credit ratings and risk parameters
+ - `REPP_AGG_DT_IRB_PORTFOLIO_METRICS` - Portfolio-level risk aggregation
+ - `REPP_AGG_DT_CUSTOMER_RATING_HISTORY` - Historical rating tracking (SCD Type 2)
+ - `REPP_AGG_DT_IRB_RWA_SUMMARY` - Risk Weighted Assets summary
+ - `REPP_AGG_DT_IRB_RISK_TRENDS` - Risk parameter trends and model validation
 
 **Key Features:**
 - **Basel III/IV Compliance**: IRB approach for regulatory capital calculation
@@ -516,7 +658,7 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `REP_AGG_001`
 - **Dynamic Tables** (1 table): 
-  - `REPP_AGG_DT_PORTFOLIO_PERFORMANCE` - Integrated cash + equity performance
+ - `REPP_AGG_DT_PORTFOLIO_PERFORMANCE` - Integrated cash + equity performance
 
 **Key Features:**
 - **Time Weighted Return (TWR)**: Industry-standard performance measurement
@@ -541,12 +683,12 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `REP_AGG_001`
 - **Dynamic Tables** (6 tables):
-  - `REPP_AGG_DT_BCBS239_RISK_AGGREGATION` - Comprehensive risk aggregation across all risk types
-  - `REPP_AGG_DT_BCBS239_EXECUTIVE_DASHBOARD` - Executive risk dashboard with key risk indicators
-  - `REPP_AGG_DT_BCBS239_REGULATORY_REPORTING` - BCBS 239 compliant regulatory reporting
-  - `REPP_AGG_DT_BCBS239_RISK_CONCENTRATION` - Real-time risk concentration analysis
-  - `REPP_AGG_DT_BCBS239_RISK_LIMITS` - Automated risk limit monitoring
-  - `REPP_AGG_DT_BCBS239_DATA_QUALITY` - Comprehensive data quality monitoring
+ - `REPP_AGG_DT_BCBS239_RISK_AGGREGATION` - Comprehensive risk aggregation across all risk types
+ - `REPP_AGG_DT_BCBS239_EXECUTIVE_DASHBOARD` - Executive risk dashboard with key risk indicators
+ - `REPP_AGG_DT_BCBS239_REGULATORY_REPORTING` - BCBS 239 compliant regulatory reporting
+ - `REPP_AGG_DT_BCBS239_RISK_CONCENTRATION` - Real-time risk concentration analysis
+ - `REPP_AGG_DT_BCBS239_RISK_LIMITS` - Automated risk limit monitoring
+ - `REPP_AGG_DT_BCBS239_DATA_QUALITY` - Comprehensive data quality monitoring
 
 **Key Features:**
 - **BCBS 239 Compliance**: Full implementation of Basel Committee principles for risk data aggregation
@@ -578,7 +720,7 @@ Execute after all raw layer schemas are deployed:
 
 **Objects Created:**
 - **Semantic View** (1 view):
-  - `REPP_SEMANTIC_VIEW` - Unified business-friendly interface to all reporting tables
+ - `REPP_SEMANTIC_VIEW` - Unified business-friendly interface to all reporting tables
 
 **Key Features:**
 - **Unified Access**: Single view across all reporting domains
@@ -595,10 +737,10 @@ Execute after all raw layer schemas are deployed:
 **Objects Created:**
 - **Schema**: `REP_AGG_001`
 - **Dynamic Tables** (4 tables):
-  - `REPP_AGG_DT_FRTB_RISK_POSITIONS` - Consolidated positions by risk class
-  - `REPP_AGG_DT_FRTB_SENSITIVITIES` - Delta/Vega/Curvature sensitivities
-  - `REPP_AGG_DT_FRTB_CAPITAL_CHARGES` - SA capital charges by risk bucket
-  - `REPP_AGG_DT_FRTB_NMRF_ANALYSIS` - Non-Modellable Risk Factor identification
+ - `REPP_AGG_DT_FRTB_RISK_POSITIONS` - Consolidated positions by risk class
+ - `REPP_AGG_DT_FRTB_SENSITIVITIES` - Delta/Vega/Curvature sensitivities
+ - `REPP_AGG_DT_FRTB_CAPITAL_CHARGES` - SA capital charges by risk bucket
+ - `REPP_AGG_DT_FRTB_NMRF_ANALYSIS` - Non-Modellable Risk Factor identification
 
 **Key Features:**
 - **FRTB Standardized Approach**: Basel III/IV compliant capital calculations
@@ -619,27 +761,27 @@ Execute after all raw layer schemas are deployed:
 ## Schema Architecture
 
 ### RAW LAYER (Data Ingestion)
-| Schema         | Purpose                          | Key Objects                                                    | Refresh Strategy       |
+| Schema | Purpose | Key Objects | Refresh Strategy |
 |----------------|----------------------------------|----------------------------------------------------------------|------------------------|
-| `CRM_RAW_001`  | Customer Master & Lifecycle      | CRMI_CUSTOMER, CRMI_ADDRESSES, CRMI_EXPOSED_PERSON, CRMI_CUSTOMER_EVENT, CRMI_CUSTOMER_STATUS, ACCI_ACCOUNTS | Stream-triggered serverless tasks |
-| `REF_RAW_001`  | Reference Data                   | REFI_FX_RATES                                                  | Stream-triggered tasks |
-| `PAY_RAW_001`  | Payment Transactions & SWIFT     | PAYI_TRANSACTIONS, ICGI_RAW_SWIFT_MESSAGES                     | Stream-triggered tasks |
-| `EQT_RAW_001`  | Equity Trading                   | EQTI_TRADES                                                    | Stream-triggered tasks |
-| `FII_RAW_001`  | Fixed Income Trading             | FIII_TRADES                                                    | Serverless tasks (60 min) |
-| `CMD_RAW_001`  | Commodity Trading                | CMDI_TRADES                                                    | Serverless tasks (60 min) |
+| `CRM_RAW_001` | Customer Master, Lifecycle & Employees | CRMI_CUSTOMER, CRMI_ADDRESSES, CRMI_EXPOSED_PERSON, CRMI_CUSTOMER_EVENT, CRMI_CUSTOMER_STATUS, ACCI_ACCOUNTS, EMPI_EMPLOYEE, EMPI_CLIENT_ASSIGNMENT | Stream-triggered serverless tasks |
+| `REF_RAW_001` | Reference Data | REFI_FX_RATES | Stream-triggered tasks |
+| `PAY_RAW_001` | Payment Transactions & SWIFT | PAYI_TRANSACTIONS, ICGI_RAW_SWIFT_MESSAGES | Stream-triggered tasks |
+| `EQT_RAW_001` | Equity Trading | EQTI_TRADES | Stream-triggered tasks |
+| `FII_RAW_001` | Fixed Income Trading | FIII_TRADES | Serverless tasks (60 min) |
+| `CMD_RAW_001` | Commodity Trading | CMDI_TRADES | Serverless tasks (60 min) |
 
 ### AGGREGATION LAYER (Business Logic)
-| Schema         | Purpose                  | Key Objects                                            | Refresh Strategy      |
+| Schema | Purpose | Key Objects | Refresh Strategy |
 |----------------|--------------------------|--------------------------------------------------------|-----------------------|
-| `CRM_AGG_001`  | Customer Analytics & Lifecycle | Address SCD Type 2 (Current/History), Customer Attribute SCD Type 2 (Current/History), Customer 360°, Account aggregation, Lifecycle metrics, Churn prediction | 1-hour dynamic tables |
-| `REF_AGG_001`  | Reference Analytics      | FX rates with analytics and volatility metrics         | 1-hour dynamic tables |
-| `PAY_AGG_001`  | Payment Analytics        | Anomaly detection, Account balances, SWIFT processing  | 1-hour dynamic tables |
-| `EQT_AGG_001`  | Equity Trading Analytics | Portfolio positions, Trade summary, Customer activity  | 1-hour dynamic tables |
-| `FII_AGG_001`  | Fixed Income Analytics   | Duration/DV01, Credit exposure, Yield curve            | 1-hour dynamic tables |
-| `CMD_AGG_001`  | Commodity Analytics      | Delta exposure, Volatility, Delivery schedule          | 1-hour dynamic tables |
-| `REP_AGG_001`  | Reporting & FRTB & BCBS239| Cross-domain reporting, Lifecycle AML correlation, FRTB capital, BCBS 239 compliance | 1-hour dynamic tables |
+| `CRM_AGG_001` | Customer Analytics, Lifecycle & Employee Performance | Address SCD Type 2 (Current/History), Customer Attribute SCD Type 2 (Current/History), Customer 360° with balances/transactions, Account aggregation, Lifecycle metrics, Churn prediction, Employee hierarchy & analytics (3 DTs + 5 views) | Dynamic tables (60 min) + Views (real-time) |
+| `REF_AGG_001` | Reference Analytics | FX rates with analytics and volatility metrics | 1-hour dynamic tables |
+| `PAY_AGG_001` | Payment Analytics | Anomaly detection, Account balances, Transaction summary, SWIFT processing | 1-hour dynamic tables |
+| `EQT_AGG_001` | Equity Trading Analytics | Portfolio positions, Trade summary, Customer activity | 1-hour dynamic tables |
+| `FII_AGG_001` | Fixed Income Analytics | Duration/DV01, Credit exposure, Yield curve | 1-hour dynamic tables |
+| `CMD_AGG_001` | Commodity Analytics | Delta exposure, Volatility, Delivery schedule | 1-hour dynamic tables |
+| `REP_AGG_001` | Reporting & FRTB & BCBS239| Cross-domain reporting, Lifecycle AML correlation, FRTB capital, BCBS 239 compliance | 1-hour dynamic tables |
 
-##  Advanced Features
+## Advanced Features
 
 ### Multi-Currency Support
 - **Customer Reporting Currencies**: Country-based currency assignment (EUR, GBP, NOK, SEK, DKK, PLN)
@@ -678,18 +820,40 @@ Execute after all raw layer schemas are deployed:
 - **Reference Links**: URL sources for compliance documentation
 - **Fuzzy Matching**: Advanced name matching for compliance screening
 
-### Customer 360° View
+### Customer 360° View with Financial Metrics
 - **Comprehensive Data**: `CRMA_AGG_DT_CUSTOMER_360` integrates all customer dimensions:
-  - Current customer attributes (employment, account tier, contact, risk profile)
-  - Current address information
-  - Current lifecycle status and churn prediction
-  - Account summary across all account types
-  - Exposed Person fuzzy matching and compliance flags
+ - Current customer attributes (employment, account tier, contact, risk profile)
+ - Current address information
+ - Current lifecycle status and churn prediction
+ - Account summary across all account types
+ - **Balance Metrics (Phase 1)**: Total balance (AUM), account type balances, min/max/avg balances
+ - **Transaction Metrics (Phase 2)**: Transaction counts, activity levels, dormancy flags, engagement scores
+ - Exposed Person fuzzy matching and compliance flags
+ - Global sanctions screening with accuracy scoring
 - **Operational Views**: Separate current/history views for attributes and addresses support both operational and analytical use cases
 - **Fuzzy Exposed Person Matching**: `EDITDISTANCE` functions for similar name detection (compliance screening)
-- **Risk Assessment**: Automated Exposed Person risk level calculation with compliance flags
+- **Sanctions Integration**: Global sanctions data from Snowflake Data Exchange with fuzzy matching
+- **Risk Assessment**: Combined PEP, sanctions, and anomaly risk scoring with numerical scores (0-100)
 - **Lifecycle Integration**: Current status, churn probability, lifecycle stage, and risk indicators
 - **Historical Tracking**: Full audit trail for all attribute and address changes with VALID_FROM/VALID_TO ranges
+- **Performance**: 60-minute refresh for consistent data snapshots across all dependent analytics
+
+### Employee Analytics & Relationship Management
+- **Employee Hierarchy**: 3-tier organizational structure (Client Advisors → Team Leaders → Super Team Leaders)
+- **Dynamic Scaling**: Employee count scales automatically with customer base (200 clients per advisor)
+- **Advisor Performance Tracking**: 8 analytical views providing comprehensive workforce analytics:
+ - **Hierarchy Views**: Recursive org chart with full reporting paths and levels
+ - **Performance Metrics**: AUM per advisor, client counts, transaction activity, capacity utilization
+ - **Portfolio Analytics**: Portfolio valuations by advisor with currency exposure and revenue projections
+ - **Team Management**: Aggregated metrics for team leaders with performance distributions
+ - **Assignment Tracking**: Current and historical client-advisor relationships (SCD Type 2)
+ - **Workload Distribution**: Capacity planning and balance analysis by country/region
+- **AUM Tracking**: Assets Under Management per advisor from Customer 360 balance metrics
+- **Transaction Activity**: Engagement metrics integrated from transaction summary
+- **Revenue Projection**: Estimated annual revenue based on 1% AUM fee assumption
+- **Compliance**: Complete audit trail of client assignment changes with reasons
+- **Workforce Optimization**: Identify overloaded advisors, available capacity, and hiring triggers
+- **Real-Time Data**: Views query latest data for up-to-the-minute workforce insights
 
 ### Customer Lifecycle Management
 - **Event Tracking**: 9 event types (ONBOARDING, ADDRESS_CHANGE, EMPLOYMENT_CHANGE, ACCOUNT_UPGRADE, ACCOUNT_DOWNGRADE, ACCOUNT_CLOSE, REACTIVATION, CHURN, DORMANT_DETECTED)
@@ -723,6 +887,8 @@ Execute after all raw layer schemas are deployed:
 - **CRMA**: Customer Master Aggregation
 - **ACCI**: Account Ingestion
 - **ACCA**: Account Aggregation
+- **EMPI**: Employee Master Ingestion
+- **EMPA**: Employee Performance Aggregation
 - **REFI**: Reference Data Ingestion
 - **REFA**: Reference Data Aggregation
 - **PAYI**: Payment Ingestion

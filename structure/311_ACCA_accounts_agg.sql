@@ -5,7 +5,7 @@
 --
 -- OVERVIEW:
 -- This schema provides the aggregation layer for account master data, creating
--- a 1:1 dynamic table copy of the raw ACCI_ACCOUNTS table with enhanced processing
+-- a 1:1 dynamic table copy of the raw ACCI_RAW_TB_ACCOUNTS table with enhanced processing
 -- capabilities. Serves as the foundation for downstream analytics and reporting
 -- while maintaining data lineage from the raw layer.
 --
@@ -29,10 +29,10 @@
 -- └─ REFRESH STRATEGY:
 --    ├─ TARGET_LAG: 1 hour (aligned with operational requirements)
 --    ├─ WAREHOUSE: MD_TEST_WH
---    └─ AUTO-REFRESH: Based on source table changes from CRM_RAW_001.ACCI_ACCOUNTS
+--    └─ AUTO-REFRESH: Based on source table changes from CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS
 --
 -- DATA ARCHITECTURE:
--- Raw Accounts (CRM_RAW_001.ACCI_ACCOUNTS) → Aggregation (CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS) → Analytics
+-- Raw Accounts (CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS) → Aggregation (CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS) → Analytics
 --
 -- SUPPORTED ACCOUNT TYPES:
 -- - CHECKING: Primary transaction accounts
@@ -45,7 +45,7 @@
 -- - NOK (Norwegian Krone), SEK (Swedish Krona), DKK (Danish Krone)
 --
 -- RELATED SCHEMAS:
--- - CRM_RAW_001: Source account master data (ACCI_ACCOUNTS)
+-- - CRM_RAW_001: Source account master data (ACCI_RAW_TB_ACCOUNTS)
 -- - PAY_AGG_001: Account balance calculations and payment analytics
 -- - CRM_AGG_001: Customer master data and address aggregations
 -- - EQT_RAW_001: Equity trades (investment account references)
@@ -85,8 +85,8 @@ CREATE OR REPLACE DYNAMIC TABLE ACCA_AGG_DT_ACCOUNTS(
     CURRENCY_GROUP VARCHAR(20) COMMENT 'Currency grouping for reporting (MAJOR_EUROPEAN/USD_BASE/OTHER_EUROPEAN/OTHER)',
     AGGREGATION_TIMESTAMP TIMESTAMP_NTZ COMMENT 'Timestamp when aggregation processing was performed',
     AGGREGATION_TYPE VARCHAR(20) COMMENT 'Type of aggregation processing (1:1_COPY_FROM_RAW)',
-    SOURCE_TABLE VARCHAR(50) COMMENT 'Source table reference for data lineage (CRM_RAW_001.ACCI_ACCOUNTS)'
-) COMMENT = '1:1 aggregation of account master data from raw layer (CRM_RAW_001.ACCI_ACCOUNTS). Provides clean aggregation layer access for downstream analytics, balance calculations, and reporting. Maintains real-time refresh for data currency while serving as bridge between raw data and analytical data products.'
+    SOURCE_TABLE VARCHAR(50) COMMENT 'Source table reference for data lineage (CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS)'
+) COMMENT = '1:1 aggregation of account master data from raw layer (CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS). Provides clean aggregation layer access for downstream analytics, balance calculations, and reporting. Maintains real-time refresh for data currency while serving as bridge between raw data and analytical data products.'
 TARGET_LAG = '60 MINUTE' WAREHOUSE = MD_TEST_WH
 AS
 SELECT 
@@ -159,9 +159,9 @@ SELECT
     -- Processing Metadata
     CURRENT_TIMESTAMP() AS AGGREGATION_TIMESTAMP,
     '1:1_COPY_FROM_RAW' AS AGGREGATION_TYPE,
-    'CRM_RAW_001.ACCI_ACCOUNTS' AS SOURCE_TABLE
+    'CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS' AS SOURCE_TABLE
 
-FROM CRM_RAW_001.ACCI_ACCOUNTS
+FROM CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS
 WHERE 1=1  -- Include all records from raw layer
 ORDER BY CUSTOMER_ID, ACCOUNT_TYPE_PRIORITY, ACCOUNT_ID;
 
@@ -218,14 +218,14 @@ ORDER BY CUSTOMER_ID, ACCOUNT_TYPE_PRIORITY, ACCOUNT_ID;
 -- ALTER DYNAMIC TABLE ACCA_AGG_DT_ACCOUNTS REFRESH;
 --
 -- DATA REQUIREMENTS:
--- - Source table CRM_RAW_001.ACCI_ACCOUNTS must contain account master data
+-- - Source table CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS must contain account master data
 -- - Account CSV files must be uploaded to stage and loaded
 -- - Raw layer must be populated before aggregation layer can function
 --
 -- MONITORING:
 -- - Dynamic table refresh status: SELECT * FROM TABLE(INFORMATION_SCHEMA.DYNAMIC_TABLE_REFRESH_HISTORY()) WHERE NAME = 'ACCA_AGG_DT_ACCOUNTS';
 -- - Account data coverage: SELECT COUNT(*) as total_accounts, COUNT(DISTINCT CUSTOMER_ID) as unique_customers FROM ACCA_AGG_DT_ACCOUNTS;
--- - Data consistency check: Compare counts with raw layer SELECT COUNT(*) FROM CRM_RAW_001.ACCI_ACCOUNTS;
+-- - Data consistency check: Compare counts with raw layer SELECT COUNT(*) FROM CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS;
 --
 -- PERFORMANCE OPTIMIZATION:
 -- - Monitor warehouse usage during refresh periods

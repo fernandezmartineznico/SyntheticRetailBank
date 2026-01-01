@@ -203,7 +203,7 @@ SELECT
     CURRENT_TIMESTAMP() AS parsed_at,
     LENGTH(RAW_XML::STRING) AS xml_size_bytes
 
-FROM PAY_RAW_001.ICGI_RAW_SWIFT_MESSAGES
+FROM PAY_RAW_001.ICGI_RAW_TB_SWIFT_MESSAGES
 WHERE RAW_XML IS NOT NULL
   AND (FILE_NAME ILIKE '%pacs008%' OR RAW_XML::STRING ILIKE '%FIToFICstmrCdtTrf%');
 
@@ -319,7 +319,7 @@ SELECT
     CURRENT_TIMESTAMP() AS parsed_at,                                       -- Processing timestamp for data quality monitoring
     LENGTH(RAW_XML::STRING) AS xml_size_bytes                              -- Message complexity indicator for performance analysis
 
-FROM PAY_RAW_001.ICGI_RAW_SWIFT_MESSAGES
+FROM PAY_RAW_001.ICGI_RAW_TB_SWIFT_MESSAGES
 WHERE RAW_XML IS NOT NULL
   AND (FILE_NAME ILIKE '%pacs002%' OR RAW_XML::STRING ILIKE '%FIToFIPmtStsRpt%');
 
@@ -472,7 +472,7 @@ LEFT JOIN ICGA_AGG_DT_SWIFT_PACS002 p002
 -- MONITORING:
 -- - Dynamic table refresh status: SELECT * FROM TABLE(INFORMATION_SCHEMA.DYNAMIC_TABLE_REFRESH_HISTORY()) WHERE NAME LIKE 'ICGA_AGG_DT_%';
 -- - Processing performance: SELECT COUNT(*), AVG(xml_size_bytes) FROM ICGA_AGG_DT_SWIFT_PACS008;
--- - Message type distribution: SELECT message_type, COUNT(*) FROM (SELECT CASE WHEN FILE_NAME ILIKE '%pacs008%' THEN 'PACS.008' ELSE 'PACS.002' END as message_type FROM PAY_RAW_001.ICGI_RAW_SWIFT_MESSAGES) GROUP BY message_type;
+-- - Message type distribution: SELECT message_type, COUNT(*) FROM (SELECT CASE WHEN FILE_NAME ILIKE '%pacs008%' THEN 'PACS.008' ELSE 'PACS.002' END as message_type FROM PAY_RAW_001.ICGI_RAW_TB_SWIFT_MESSAGES) GROUP BY message_type;
 -- - Payment lifecycle SLA: SELECT AVG(ack_time) as avg_ack_minutes, MAX(ack_time) as max_ack_minutes FROM ICGA_AGG_DT_SWIFT_PAYMENT_LIFECYCLE;
 --
 -- PERFORMANCE OPTIMIZATION:

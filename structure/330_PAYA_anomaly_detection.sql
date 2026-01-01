@@ -29,12 +29,12 @@
 -- ┌─ DYNAMIC TABLES (3):
 -- │  ├─ PAYA_AGG_DT_TRANSACTION_ANOMALIES - Abnormal transaction detection with scoring
 -- │  ├─ PAYA_AGG_DT_ACCOUNT_BALANCES - Current account balances per account number
--- │  └─ PAYA_AGG_DT_TIME_WEIGHTED_RETURN - Investment performance with TWR methodology
+-- │  └─ PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY - Pre-aggregated customer transaction metrics
 -- │
 -- └─ REFRESH STRATEGY:
 --    ├─ TARGET_LAG: 1 hour (aligned with operational monitoring requirements)
 --    ├─ WAREHOUSE: MD_TEST_WH
---    └─ AUTO-REFRESH: Based on source table changes from PAY_RAW_001.PAYI_TRANSACTIONS and CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS
+--    └─ AUTO-REFRESH: Based on source table changes from PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS and CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS
 --
 -- ANOMALY DETECTION CRITERIA:
 -- - Amount Anomalies: Transactions significantly above/below customer's typical range
@@ -142,7 +142,7 @@ WITH customer_behavioral_profile AS (
         -- Large Transaction Threshold (95th percentile)
         PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY AMOUNT) as large_transaction_threshold
         
-    FROM PAY_RAW_001.PAYI_TRANSACTIONS
+    FROM PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS
     WHERE BOOKING_DATE >= CURRENT_DATE - INTERVAL '450 days'  -- Extended to include historical 2024 data
       AND BOOKING_DATE < CURRENT_DATE
     GROUP BY ACCOUNT_ID
@@ -200,9 +200,9 @@ transaction_analysis AS (
             RANGE BETWEEN INTERVAL '7 days' PRECEDING AND CURRENT ROW
         ) - 1 as transactions_last_7d
         
-    FROM PAY_RAW_001.PAYI_TRANSACTIONS t
+    FROM PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS t
     LEFT JOIN customer_behavioral_profile cbp ON t.ACCOUNT_ID = cbp.ACCOUNT_ID
-    LEFT JOIN CRM_RAW_001.ACCI_ACCOUNTS acc ON t.ACCOUNT_ID = acc.ACCOUNT_ID
+    LEFT JOIN CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS acc ON t.ACCOUNT_ID = acc.ACCOUNT_ID
     WHERE t.BOOKING_DATE >= CURRENT_DATE - INTERVAL '120 days'  -- Extended to analyze recent historical transactions (2024 data)
 )
 
@@ -409,7 +409,7 @@ account_transactions AS (
         t.BASE_AMOUNT AS allocated_amount_base  -- Direct allocation - no complex logic needed
         
     FROM all_accounts acc
-    LEFT JOIN PAY_RAW_001.PAYI_TRANSACTIONS t ON acc.ACCOUNT_ID = t.ACCOUNT_ID
+    LEFT JOIN PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS t ON acc.ACCOUNT_ID = t.ACCOUNT_ID
         AND t.BOOKING_DATE >= CURRENT_DATE - INTERVAL '450 days'  -- Match anomaly detection time range
 ),
 
@@ -417,7 +417,7 @@ transaction_base_currency AS (
     -- Get the actual base currency from transaction data
     SELECT DISTINCT t.BASE_CURRENCY
     FROM account_transactions atd
-    INNER JOIN PAY_RAW_001.PAYI_TRANSACTIONS t ON atd.TRANSACTION_ID = t.TRANSACTION_ID
+    INNER JOIN PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS t ON atd.TRANSACTION_ID = t.TRANSACTION_ID
     WHERE atd.TRANSACTION_ID IS NOT NULL
     LIMIT 1
 ),
@@ -547,14 +547,101 @@ LEFT JOIN fx_rates_current fx ON fx.TO_CURRENCY = abc.BASE_CURRENCY
 ORDER BY abc.current_balance_base DESC, abc.ACCOUNT_ID;
 
 -- ============================================================
+-- PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY - Customer Transaction Summary
+-- ============================================================
+-- Pre-aggregated transaction metrics per customer for efficient integration into
+-- CRMA_AGG_DT_CUSTOMER_360 and employee analytics. Eliminates performance overhead
+-- of real-time transaction aggregation for advisor performance tracking, engagement
+-- scoring, dormancy detection, and churn prediction.
+
+CREATE OR REPLACE DYNAMIC TABLE PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY(
+    CUSTOMER_ID VARCHAR(30) COMMENT 'Customer identifier for joining to CRMA_AGG_DT_CUSTOMER_360',
+    
+    -- Transaction Volume Metrics
+    TOTAL_TRANSACTIONS_12M NUMBER(10,0) COMMENT 'Count of all transactions in last 12 months for engagement scoring',
+    TOTAL_TRANSACTIONS_ALL_TIME NUMBER(10,0) COMMENT 'Lifetime transaction count since customer onboarding',
+    
+    -- Transaction Type Breakdown (Last 12 Months)
+    DEBIT_TRANSACTIONS NUMBER(10,0) COMMENT 'Number of debit transactions (spending activity)',
+    CREDIT_TRANSACTIONS NUMBER(10,0) COMMENT 'Number of credit transactions (income deposits)',
+    
+    -- Recency Metrics
+    LAST_TRANSACTION_DATE DATE COMMENT 'Most recent transaction date for dormancy detection',
+    DAYS_SINCE_LAST_TRANSACTION NUMBER(10,0) COMMENT 'Days since last activity (churn indicator)',
+    FIRST_TRANSACTION_DATE DATE COMMENT 'First transaction date for customer lifecycle analysis',
+    
+    -- Activity Pattern Metrics
+    AVG_MONTHLY_TRANSACTIONS NUMBER(10,2) COMMENT 'Average transactions per month (engagement trend)',
+    TRANSACTION_MONTHS_ACTIVE NUMBER(10,0) COMMENT 'Number of months with at least 1 transaction',
+    
+    -- Transaction Flags
+    IS_DORMANT_TRANSACTIONALLY BOOLEAN COMMENT 'TRUE if no transactions in 180+ days',
+    IS_HIGHLY_ACTIVE BOOLEAN COMMENT 'TRUE if > 50 transactions in last month',
+    
+    -- Metadata
+    SUMMARY_AS_OF_DATE TIMESTAMP_NTZ COMMENT 'Timestamp when summary was calculated'
+    
+) COMMENT = 'Pre-aggregated customer transaction metrics for efficient integration into Customer 360 and employee analytics. Provides engagement scoring, dormancy detection, and churn prediction indicators. Refreshed hourly to match CRMA_AGG_DT_CUSTOMER_360 lag.'
+TARGET_LAG = '60 MINUTE' WAREHOUSE = MD_TEST_WH
+AS
+SELECT
+    acc.CUSTOMER_ID,
+    
+    -- Transaction volume calculations
+    COUNT(CASE WHEN txn.VALUE_DATE >= DATEADD(month, -12, CURRENT_DATE()) THEN 1 END) AS TOTAL_TRANSACTIONS_12M,
+    COUNT(*) AS TOTAL_TRANSACTIONS_ALL_TIME,
+    
+    -- Transaction type breakdown (last 12 months)
+    -- Derive type from AMOUNT (negative = debit/withdrawal, positive = credit/deposit)
+    COUNT(CASE 
+        WHEN txn.VALUE_DATE >= DATEADD(month, -12, CURRENT_DATE()) 
+        AND txn.AMOUNT < 0 
+        THEN 1 
+    END) AS DEBIT_TRANSACTIONS,
+    
+    COUNT(CASE 
+        WHEN txn.VALUE_DATE >= DATEADD(month, -12, CURRENT_DATE()) 
+        AND txn.AMOUNT > 0 
+        THEN 1 
+    END) AS CREDIT_TRANSACTIONS,
+    
+    -- Recency metrics
+    MAX(txn.VALUE_DATE) AS LAST_TRANSACTION_DATE,
+    DATEDIFF(day, MAX(txn.VALUE_DATE), CURRENT_DATE()) AS DAYS_SINCE_LAST_TRANSACTION,
+    MIN(txn.VALUE_DATE) AS FIRST_TRANSACTION_DATE,
+    
+    -- Activity pattern metrics
+    ROUND(COUNT(*) / NULLIF(DATEDIFF(month, MIN(txn.VALUE_DATE), CURRENT_DATE()), 0), 2) AS AVG_MONTHLY_TRANSACTIONS,
+    COUNT(DISTINCT DATE_TRUNC('month', txn.VALUE_DATE)) AS TRANSACTION_MONTHS_ACTIVE,
+    
+    -- Transaction flags
+    CASE 
+        WHEN DATEDIFF(day, MAX(txn.VALUE_DATE), CURRENT_DATE()) >= 180 THEN TRUE 
+        ELSE FALSE 
+    END AS IS_DORMANT_TRANSACTIONALLY,
+    
+    CASE 
+        WHEN COUNT(CASE WHEN txn.VALUE_DATE >= DATEADD(month, -1, CURRENT_DATE()) THEN 1 END) > 50 THEN TRUE 
+        ELSE FALSE 
+    END AS IS_HIGHLY_ACTIVE,
+    
+    -- Metadata
+    CURRENT_TIMESTAMP() AS SUMMARY_AS_OF_DATE
+
+FROM PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS txn
+INNER JOIN CRM_RAW_001.ACCI_RAW_TB_ACCOUNTS acc
+    ON txn.ACCOUNT_ID = acc.ACCOUNT_ID
+GROUP BY acc.CUSTOMER_ID;
+
+-- ============================================================
 -- NOTE: Time Weighted Return (TWR) Performance Analysis has been moved to REP_AGG_001
 -- ============================================================
 -- Portfolio performance measurement (combining cash + equity) is now in:
 -- REP_AGG_001.REPP_AGG_DT_PORTFOLIO_PERFORMANCE
 --
 -- This provides integrated performance analytics across all asset classes including:
--- - Cash account performance (from PAYI_TRANSACTIONS)
--- - Equity trading performance (from EQTI_TRADES)
+-- - Cash account performance (from PAYI_RAW_TB_TRANSACTIONS)
+-- - Equity trading performance (from EQTI_RAW_TB_TRADES)
 -- - Combined portfolio TWR with asset allocation
 -- - Risk-adjusted returns and performance classification
 --
@@ -567,13 +654,16 @@ ORDER BY abc.current_balance_base DESC, abc.ACCOUNT_ID;
 -- ✅ PAY_AGG_001 Schema Deployment Complete
 --
 -- OBJECTS CREATED:
--- • 2 Dynamic Tables: 
+-- • 3 Dynamic Tables: 
 --   - PAYA_AGG_DT_TRANSACTION_ANOMALIES (behavioral anomaly detection)
 --   - PAYA_AGG_DT_ACCOUNT_BALANCES (real-time account balance calculation)
+--   - PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY (pre-aggregated customer transaction metrics)
 -- • Advanced anomaly detection: Multi-dimensional behavioral analysis
 -- • Account balance management: Real-time balance tracking with multi-currency support
+-- • Transaction aggregation: Pre-aggregated customer metrics for CRMA_AGG_DT_CUSTOMER_360 integration
 -- • Risk scoring: Composite anomaly scores with operational thresholds
 -- • Financial reporting: Current balances, activity levels, and balance categorization
+-- • Engagement scoring: Transaction patterns for advisor performance and churn prediction
 -- • Automated refresh: 1-hour TARGET_LAG for near real-time financial operations
 --
 -- PORTFOLIO PERFORMANCE MEASUREMENT:
@@ -585,13 +675,15 @@ ORDER BY abc.current_balance_base DESC, abc.ACCOUNT_ID;
 -- 1. ✅ PAY_AGG_001 schema deployed successfully
 -- 2. ✅ Date filters adjusted for historical synthetic data (2024)
 -- 3. ✅ Account balance calculation dynamic table added
--- 4. ✅ Portfolio performance moved to reporting layer (REP_AGG_001)
--- 5. Verify dynamic table refresh: SHOW DYNAMIC TABLES IN SCHEMA PAY_AGG_001;
--- 6. Monitor anomaly detection performance and adjust thresholds if needed
--- 7. Monitor account balance accuracy and transaction allocation logic
--- 8. Integrate with fraud detection systems and operational dashboards
--- 9. Set up alerting for CRITICAL_ANOMALY and HIGH_ANOMALY classifications
--- 10. Set up alerting for overdrawn accounts and dormant account detection
+-- 4. ✅ Customer transaction summary dynamic table added
+-- 5. ✅ Portfolio performance moved to reporting layer (REP_AGG_001)
+-- 6. Verify dynamic table refresh: SHOW DYNAMIC TABLES IN SCHEMA PAY_AGG_001;
+-- 7. Monitor anomaly detection performance and adjust thresholds if needed
+-- 8. Monitor account balance accuracy and transaction allocation logic
+-- 9. Monitor customer transaction summary accuracy for engagement metrics
+-- 10. Integrate with fraud detection systems and operational dashboards
+-- 11. Set up alerting for CRITICAL_ANOMALY and HIGH_ANOMALY classifications
+-- 12. Set up alerting for overdrawn accounts and dormant account detection
 --
 -- USAGE EXAMPLES:
 --
@@ -630,6 +722,39 @@ ORDER BY abc.current_balance_base DESC, abc.ACCOUNT_ID;
 -- SELECT ACCOUNT_ID, CUSTOMER_ID, CURRENT_BALANCE_BASE, LAST_TRANSACTION_DATE, DAYS_SINCE_LAST_TRANSACTION
 -- FROM PAYA_AGG_DT_ACCOUNT_BALANCES
 -- WHERE DAYS_SINCE_LAST_TRANSACTION > 90;
+--
+-- ============================================================
+-- CUSTOMER TRANSACTION SUMMARY QUERIES
+-- ============================================================
+-- -- Customer engagement metrics
+-- SELECT CUSTOMER_ID, TOTAL_TRANSACTIONS_12M, AVG_MONTHLY_TRANSACTIONS, 
+--        IS_DORMANT_TRANSACTIONALLY, IS_HIGHLY_ACTIVE
+-- FROM PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY
+-- ORDER BY TOTAL_TRANSACTIONS_12M DESC;
+--
+-- -- Dormant customers (no transactions in 180+ days)
+-- SELECT CUSTOMER_ID, LAST_TRANSACTION_DATE, DAYS_SINCE_LAST_TRANSACTION,
+--        TOTAL_TRANSACTIONS_ALL_TIME
+-- FROM PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY
+-- WHERE IS_DORMANT_TRANSACTIONALLY = TRUE
+-- ORDER BY DAYS_SINCE_LAST_TRANSACTION DESC;
+--
+-- -- Highly active customers (churn risk prevention)
+-- SELECT CUSTOMER_ID, TOTAL_TRANSACTIONS_12M, AVG_MONTHLY_TRANSACTIONS,
+--        DEBIT_TRANSACTIONS, CREDIT_TRANSACTIONS
+-- FROM PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY
+-- WHERE IS_HIGHLY_ACTIVE = TRUE
+-- ORDER BY TOTAL_TRANSACTIONS_12M DESC;
+--
+-- -- Customer transaction patterns summary
+-- SELECT 
+--     COUNT(*) as TOTAL_CUSTOMERS,
+--     AVG(TOTAL_TRANSACTIONS_12M) as AVG_TRANSACTIONS_12M,
+--     MAX(TOTAL_TRANSACTIONS_12M) as MAX_TRANSACTIONS_12M,
+--     COUNT(CASE WHEN IS_DORMANT_TRANSACTIONALLY THEN 1 END) as DORMANT_CUSTOMERS,
+--     ROUND(COUNT(CASE WHEN IS_DORMANT_TRANSACTIONALLY THEN 1 END) * 100.0 / COUNT(*), 2) as DORMANT_PCT,
+--     COUNT(CASE WHEN IS_HIGHLY_ACTIVE THEN 1 END) as HIGHLY_ACTIVE_CUSTOMERS
+-- FROM PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY;
 --
 -- ============================================================
 -- PORTFOLIO PERFORMANCE QUERIES (Now in REP_AGG_001)
@@ -671,6 +796,7 @@ ORDER BY abc.current_balance_base DESC, abc.ACCOUNT_ID;
 -- To manually refresh a dynamic table:
 -- ALTER DYNAMIC TABLE PAYA_AGG_DT_TRANSACTION_ANOMALIES REFRESH;
 -- ALTER DYNAMIC TABLE PAYA_AGG_DT_ACCOUNT_BALANCES REFRESH;
+-- ALTER DYNAMIC TABLE PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY REFRESH;
 --
 -- ============================================================
 -- PAY_AGG_001 Schema setup completed!

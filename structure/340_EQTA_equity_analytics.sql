@@ -5,7 +5,7 @@
 --
 -- OVERVIEW:
 -- This schema provides aggregated views and analytics for equity trading data.
--- It transforms raw FIX protocol trades from EQT_RAW_001.EQTI_TRADES into 
+-- It transforms raw FIX protocol trades from EQT_RAW_001.EQTI_RAW_TB_TRADES into 
 -- business-ready analytical views for portfolio management, performance tracking,
 -- and risk management.
 --
@@ -29,7 +29,7 @@
 --    └─ AUTO-REFRESH: Based on source table changes
 --
 -- DATA FLOW:
--- EQT_RAW_001.EQTI_TRADES (raw FIX protocol trades)
+-- EQT_RAW_001.EQTI_RAW_TB_TRADES (raw FIX protocol trades)
 --     ↓
 -- EQTA_AGG_DT_TRADE_SUMMARY (enriched trade analytics)
 --     ↓
@@ -162,7 +162,7 @@ SELECT
     -- Metadata
     t.CREATED_AT
 
-FROM EQT_RAW_001.EQTI_TRADES t
+FROM EQT_RAW_001.EQTI_RAW_TB_TRADES t
 ORDER BY t.TRADE_DATE DESC;
 
 -- ============================================================
@@ -284,7 +284,7 @@ SELECT
     -- Metadata
     CURRENT_TIMESTAMP() AS LAST_UPDATED
 
-FROM EQT_RAW_001.EQTI_TRADES t
+FROM EQT_RAW_001.EQTI_RAW_TB_TRADES t
 GROUP BY t.ACCOUNT_ID, t.CUSTOMER_ID, t.SYMBOL, t.ISIN, t.CURRENCY
 ORDER BY t.ACCOUNT_ID, t.SYMBOL;
 
@@ -336,7 +336,7 @@ WITH customer_trades AS (
             WHEN ABS(t.GROSS_AMOUNT) > 0 THEN (t.COMMISSION / ABS(t.GROSS_AMOUNT)) * 10000
             ELSE 0
         END as commission_bps
-    FROM EQT_RAW_001.EQTI_TRADES t
+    FROM EQT_RAW_001.EQTI_RAW_TB_TRADES t
 ),
 symbol_counts AS (
     SELECT 
@@ -428,7 +428,7 @@ ORDER BY TOTAL_TRADES DESC;
 --
 -- DYNAMIC TABLE REFRESH STATUS:
 -- All three dynamic tables will automatically refresh based on changes to the
--- source table (EQTI_TRADES) with a 1-hour target lag.
+-- source table (EQTI_RAW_TB_TRADES) with a 1-hour target lag.
 --
 -- USAGE EXAMPLES:
 --

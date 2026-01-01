@@ -117,16 +117,62 @@ CREATE TAG IF NOT EXISTS SENSITIVITY_LEVEL
     COMMENT = 'Data sensitivity classification for privacy and compliance controls. Valid values: "restricted" (highly sensitive financial/PII data requiring strict access controls) | "top_secret" (maximum protection for personal identifiers and addresses). Used for automated masking policies and role-based access control.';
 
 -- ============================================================
+-- PERMISSION GRANTS - Database and Schema Access
+-- ============================================================
+-- Grant USAGE permissions to PUBLIC role for development and testing access
+-- This enables all users to query data and run analytics
+
+-- Grant database-level access
+GRANT USAGE ON DATABASE AAA_DEV_SYNTHETIC_BANK TO ROLE PUBLIC;
+
+-- Grant schema-level access for all RAW layer schemas
+--GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.CRM_RAW_001 TO ROLE PUBLIC;
+--GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.REF_RAW_001 TO ROLE PUBLIC;
+--GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.PAY_RAW_001 TO ROLE PUBLIC;
+--GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.EQT_RAW_001 TO ROLE PUBLIC;
+--GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.FII_RAW_001 TO ROLE PUBLIC;
+--GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.CMD_RAW_001 TO ROLE PUBLIC;
+--GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.LOA_RAW_v001 TO ROLE PUBLIC;
+
+-- Grant schema-level access for all AGGREGATION layer schemas
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.CRM_AGG_001 TO ROLE PUBLIC;
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.REF_AGG_001 TO ROLE PUBLIC;
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.PAY_AGG_001 TO ROLE PUBLIC;
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.EQT_AGG_001 TO ROLE PUBLIC;
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.FII_AGG_001 TO ROLE PUBLIC;
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.CMD_AGG_001 TO ROLE PUBLIC;
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.LOA_AGG_v001 TO ROLE PUBLIC;
+
+-- Grant schema-level access for REPORTING layer schemas
+GRANT USAGE ON SCHEMA AAA_DEV_SYNTHETIC_BANK.REP_AGG_001 TO ROLE PUBLIC;
+
+-- ============================================================
+-- CORTEX AI AGENT PERMISSIONS
+-- ============================================================
+-- Grant permissions for Snowflake Cortex AI agents (requires ACCOUNTADMIN role)
+-- This enables intelligent analytics and natural language query capabilities
+
+GRANT CREATE AGENT ON SCHEMA snowflake_intelligence.agents TO ROLE ACCOUNTADMIN;
+
+-- ============================================================
 -- SETUP COMPLETION SUMMARY
 -- ============================================================
 -- Infrastructure created:
 --   ✓ Database: AAA_DEV_SYNTHETIC_BANK
 --   ✓ Warehouse: MD_TEST_WH (X-SMALL, auto-suspend 5min)
---   ✓ 14 Schemas across RAW, AGGREGATION, and REPORTING layers
+--   ✓ 15 Schemas across RAW, AGGREGATION, and REPORTING layers
 --   ✓ Sensitivity tags for data classification and privacy controls
+--   ✓ PUBLIC role permissions granted for database and all schemas
+--   ✓ Cortex AI agent permissions configured for ACCOUNTADMIN
+--
+-- Permissions granted:
+--   • DATABASE USAGE: PUBLIC role can access AAA_DEV_SYNTHETIC_BANK
+--   • SCHEMA USAGE: PUBLIC role can access all 15 schemas (7 RAW + 7 AGG + 1 REP)
+--   • CORTEX AI: ACCOUNTADMIN can create intelligent agents for natural language queries
 --
 -- Next steps:
 --   1. Run subsequent SQL files to create tables and objects
 --   2. Configure data masking policies using sensitivity tags
---   3. Set up role-based access control
+--   3. Grant SELECT permissions on tables as needed
+--   4. Create Cortex AI agents for business intelligence
 -- ============================================================

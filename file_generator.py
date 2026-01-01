@@ -12,6 +12,7 @@ from customer_generator import CustomerGenerator
 from pay_transaction_generator import TransactionGenerator
 from fx_generator import FXRateGenerator, AccountGenerator
 from equity_generator import EquityTradeGenerator
+from employee_generator import EmployeeGenerator
 
 
 class FileGenerator:
@@ -82,6 +83,31 @@ class FileGenerator:
         print(f"Customer data saved to: {customer_file}")
         print(f"Address data (with insert timestamps) saved to: {address_file}")
         print(f"Total address records: {len(customer_addresses)} (append-only base table)")
+        
+        # Generate employee hierarchy (dynamic based on customer distribution)
+        print("\nGenerating employee hierarchy...")
+        employee_generator = EmployeeGenerator(self.config)
+        
+        # Group customers by current country for employee assignment
+        customers_by_country = customer_generator.group_customers_by_current_country()
+        
+        # Generate employees and assignments dynamically
+        employees, assignments = employee_generator.generate_employees_and_assignments(customers_by_country)
+        
+        # Save employee data
+        employee_file = self.master_data_dir / "employees.csv"
+        employee_generator.write_employees_to_csv(str(employee_file))
+        
+        assignment_file = self.master_data_dir / "client_assignments.csv"
+        employee_generator.write_assignments_to_csv(str(assignment_file))
+        
+        print(f"Generated {len(employees)} employees")
+        print(f"  - Client Advisors: {sum(1 for e in employees if e.position_level == 'CLIENT_ADVISOR')}")
+        print(f"  - Team Leaders: {sum(1 for e in employees if e.position_level == 'TEAM_LEADER')}")
+        print(f"  - Super Team Leaders: {sum(1 for e in employees if e.position_level == 'SUPER_TEAM_LEADER')}")
+        print(f"Employee data saved to: {employee_file}")
+        print(f"Client assignments saved to: {assignment_file}")
+        print(f"Total assignments: {len(assignments)}")
         
         # Generate accounts
         print("\nGenerating account master data...")
@@ -167,19 +193,24 @@ class FileGenerator:
         
         # Generate summary report
         summary_file = self._generate_summary_report(
-            customers, anomalous_customers, all_transactions, daily_files, accounts, fx_rates, equity_summary, additional_results
+            customers, anomalous_customers, all_transactions, daily_files, accounts, fx_rates, equity_summary, additional_results,
+            employees, assignments
         )
         
         return {
             "customer_file": str(customer_file),
             "address_file": str(address_file),
             "account_file": account_file,
+            "employee_file": str(employee_file),
+            "assignment_file": str(assignment_file),
             "fx_files": files_created,
             "fx_file_count": len(files_created),
             "daily_files": daily_files,
             "summary_file": summary_file,
             "total_customers": len(customers),
             "total_accounts": len(accounts),
+            "total_employees": len(employees),
+            "total_assignments": len(assignments),
             "anomalous_customers": len(anomalous_customers),
             "total_transactions": len(all_transactions),
             "total_fx_rates": len(fx_rates),
@@ -188,7 +219,8 @@ class FileGenerator:
     
     def _generate_summary_report(self, customers: List, anomalous_customers: List, 
                                transactions: List, daily_files: List[str], accounts: List, fx_rates: List,
-                               equity_summary: dict, additional_results: dict = None) -> str:
+                               equity_summary: dict, additional_results: dict = None,
+                               employees: List = None, assignments: List = None) -> str:
         """Generate a summary report of the generated data"""
         summary_file = self.reports_dir / "generation_summary.txt"
         
@@ -234,6 +266,8 @@ class FileGenerator:
             f.write("GENERATED DATA SUMMARY:\n")
             f.write(f"  Total customers: {len(customers)}\n")
             f.write(f"  Total accounts: {len(accounts)}\n")
+            if employees:
+                f.write(f"  Total employees: {len(employees)}\n")
             f.write(f"  Anomalous customers: {len(anomalous_customers)} ({len(anomalous_customers)/len(customers)*100:.1f}%)\n")
             f.write(f"  Total transactions: {len(transactions)}\n")
             f.write(f"  Anomalous transactions: {len(anomalous_transactions)} ({len(anomalous_transactions)/len(transactions)*100:.1f}%)\n")
@@ -292,6 +326,29 @@ class FileGenerator:
             f.write(f"  Base currency: {equity_summary['base_currency']}\n")
             f.write(f"  Markets covered: {', '.join(equity_summary['markets'])}\n\n")
             
+            # Add employee hierarchy statistics
+            if employees and assignments:
+                advisor_count = sum(1 for e in employees if e.position_level == 'CLIENT_ADVISOR')
+                tl_count = sum(1 for e in employees if e.position_level == 'TEAM_LEADER')
+                stl_count = sum(1 for e in employees if e.position_level == 'SUPER_TEAM_LEADER')
+                
+                f.write("EMPLOYEE HIERARCHY STATISTICS:\n")
+                f.write(f"  Total employees: {len(employees)}\n")
+                f.write(f"  Super Team Leaders: {stl_count}\n")
+                f.write(f"  Team Leaders: {tl_count}\n")
+                f.write(f"  Client Advisors: {advisor_count}\n")
+                f.write(f"  Customer assignments: {len(assignments)}\n")
+                
+                # Calculate average clients per advisor
+                if advisor_count > 0:
+                    avg_clients = len(assignments) / advisor_count
+                    f.write(f"  Avg clients per advisor: {avg_clients:.1f}\n")
+                
+                # Count countries covered
+                countries_covered = len(set(e.country for e in employees if e.position_level == 'CLIENT_ADVISOR'))
+                f.write(f"  Countries covered: {countries_covered}\n")
+                f.write("\n")
+            
             # Add detailed statistics for additional generators
             if additional_results:
                 if 'swift' in additional_results and additional_results['swift']:
@@ -340,7 +397,11 @@ class FileGenerator:
             f.write("\nFILES GENERATED:\n")
             f.write(f"📁 Master Data (master_data/):\n")
             f.write(f"  customers.csv\n")
+            f.write(f"  customer_addresses.csv\n")
             f.write(f"  accounts.csv\n")
+            if employees and assignments:
+                f.write(f"  employees.csv\n")
+                f.write(f"  client_assignments.csv\n")
             
             f.write(f"\n📁 FX Rates (fx_rates/):\n")
             f.write(f"  fx_rates.csv\n")

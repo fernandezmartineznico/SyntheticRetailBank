@@ -19,19 +19,19 @@
 --
 -- OBJECTS CREATED:
 -- ┌─ STAGES (1):
--- │  └─ REFI_FX_RATES      - FX rates files
+-- │  └─ REFI_RAW_TB_FX_RATES      - FX rates files
 -- │
 -- ├─ FILE FORMATS (1):
 -- │  └─ REFI_FF_FX_RATES_CSV - FX rates CSV format
 -- │
 -- ├─ TABLES (1):
--- │  └─ REFI_FX_RATES - Daily FX rates with bid/ask spreads
+-- │  └─ REFI_RAW_TB_FX_RATES - Daily FX rates with bid/ask spreads
 -- │
 -- ├─ STREAMS (1):
--- │  └─ REFI_STREAM_FX_RATE_FILES - Detects new FX rate files
+-- │  └─ REFI_RAW_STREAM_FX_RATE_FILES - Detects new FX rate files
 -- │
 -- └─ TASKS (1):
---    └─ REFI_TASK_LOAD_FX_RATES - Automated FX rate loading
+--    └─ REFI_RAW_TASK_LOAD_FX_RATES - Automated FX rate loading
 --
 -- DATA ARCHITECTURE:
 -- File Upload → Stage → Stream Detection → Task Processing → Table
@@ -58,7 +58,7 @@ USE SCHEMA REF_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- FX rates data stage
-CREATE OR REPLACE STAGE REFI_FX_RATES
+CREATE OR REPLACE STAGE REFI_RAW_STAGE_FX_RATES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -91,12 +91,12 @@ CREATE OR REPLACE FILE FORMAT REFI_FF_FX_RATES_CSV
 -- ============================================================
 
 -- ============================================================
--- REFI_FX_RATES - Daily FX Rates with Bid/Ask Spreads
+-- REFI_RAW_TB_FX_RATES - Daily FX Rates with Bid/Ask Spreads
 -- ============================================================
 -- Daily foreign exchange rates with realistic bid/ask spreads
 -- for multi-currency operations and currency conversion
 
-CREATE OR REPLACE TABLE REFI_FX_RATES (
+CREATE OR REPLACE TABLE REFI_RAW_TB_FX_RATES (
     DATE DATE NOT NULL COMMENT 'Rate date (YYYY-MM-DD)',
     FROM_CURRENCY VARCHAR(3) NOT NULL COMMENT 'Source currency',
     TO_CURRENCY VARCHAR(3) NOT NULL COMMENT 'Target currency',
@@ -108,7 +108,7 @@ CREATE OR REPLACE TABLE REFI_FX_RATES (
     CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
 
     -- Constraints
-    CONSTRAINT PK_REFI_FX_RATES PRIMARY KEY (DATE, FROM_CURRENCY, TO_CURRENCY)
+    CONSTRAINT PK_REFI_RAW_TB_FX_RATES PRIMARY KEY (DATE, FROM_CURRENCY, TO_CURRENCY)
     -- CHECK constraints not supported in Snowflake - replaced with comments for documentation
     -- CHK_FX_CURRENCIES: FROM_CURRENCY and TO_CURRENCY should be in ('USD', 'EUR', 'GBP', 'JPY', 'CAD') and different
     -- CHK_FX_RATES_POSITIVE: MID_RATE, BID_RATE, ASK_RATE should be > 0
@@ -124,9 +124,9 @@ COMMENT = 'Daily foreign exchange rates with realistic bid/ask spreads';
 -- tracking for reliable data pipeline processing.
 
 -- FX rates file detection stream
-CREATE OR REPLACE STREAM REFI_STREAM_FX_RATE_FILES
-    ON STAGE REFI_FX_RATES
-    COMMENT = 'Monitors REFI_FX_RATES stage for new FX rates CSV files. Triggers REFI_TASK_LOAD_FX_RATES when files matching *fx_rates*.csv pattern are detected';
+CREATE OR REPLACE STREAM REFI_RAW_STREAM_FX_RATE_FILES
+    ON STAGE REFI_RAW_STAGE_FX_RATES
+    COMMENT = 'Monitors REFI_RAW_STAGE_FX_RATES stage for new FX rates CSV files. Triggers REFI_RAW_TASK_LOAD_FX_RATES when files matching *fx_rates*.csv pattern are detected';
 
 -- ============================================================
 -- AUTOMATED PROCESSING TASKS - Data Pipeline Orchestration
@@ -136,13 +136,13 @@ CREATE OR REPLACE STREAM REFI_STREAM_FX_RATE_FILES
 -- usage. Error handling continues processing despite individual record failures.
 
 -- FX rates loading task
-CREATE OR REPLACE TASK REFI_TASK_LOAD_FX_RATES
+CREATE OR REPLACE TASK REFI_RAW_TASK_LOAD_FX_RATES
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('REFI_STREAM_FX_RATE_FILES')
+    WHEN SYSTEM$STREAM_HAS_DATA('REFI_RAW_STREAM_FX_RATE_FILES')
 AS
-    COPY INTO REFI_FX_RATES (DATE, FROM_CURRENCY, TO_CURRENCY, MID_RATE, BID_RATE, ASK_RATE)
-    FROM @REFI_FX_RATES
+    COPY INTO REFI_RAW_TB_FX_RATES (DATE, FROM_CURRENCY, TO_CURRENCY, MID_RATE, BID_RATE, ASK_RATE)
+    FROM @REFI_RAW_STAGE_FX_RATES
     PATTERN = '.*fx_rates.*\.csv'
     FILE_FORMAT = REFI_FF_FX_RATES_CSV
     ON_ERROR = CONTINUE;
@@ -154,7 +154,7 @@ AS
 -- controlled deployment and testing before enabling automated data flows.
 
 -- Enable FX rates data loading
-ALTER TASK REFI_TASK_LOAD_FX_RATES RESUME;
+ALTER TASK REFI_RAW_TASK_LOAD_FX_RATES RESUME;
 
 -- ============================================================
 -- SCHEMA COMPLETION STATUS
@@ -162,35 +162,35 @@ ALTER TASK REFI_TASK_LOAD_FX_RATES RESUME;
 -- ✅ REF_RAW_001 Schema Deployment Complete
 --
 -- OBJECTS CREATED:
--- • 1 Stage: REFI_FX_RATES
+-- • 1 Stage: REFI_RAW_TB_FX_RATES
 -- • 1 File Format: REFI_FF_FX_RATES_CSV
--- • 1 Table: REFI_FX_RATES
--- • 1 Stream: REFI_STREAM_FX_RATE_FILES
--- • 1 Task: REFI_TASK_LOAD_FX_RATES (ACTIVE)
+-- • 1 Table: REFI_RAW_TB_FX_RATES
+-- • 1 Stream: REFI_RAW_STREAM_FX_RATE_FILES
+-- • 1 Task: REFI_RAW_TASK_LOAD_FX_RATES (ACTIVE)
 --
 -- NEXT STEPS:
 -- 1. ✅ REF_RAW_001 schema deployed successfully
--- 2. Upload FX rates CSV files to REFI_FX_RATES stage
+-- 2. Upload FX rates CSV files to REFI_RAW_TB_FX_RATES stage
 -- 3. Monitor task execution: SHOW TASKS IN SCHEMA REF_RAW_001;
--- 4. Verify data loading: SELECT COUNT(*) FROM REFI_FX_RATES;
+-- 4. Verify data loading: SELECT COUNT(*) FROM REFI_RAW_TB_FX_RATES;
 -- 5. Check for processing errors in task history
 -- 6. Proceed to deploy dependent schemas (PAYI, EQTI, FIII)
 --
 -- USAGE EXAMPLES:
 -- -- Upload files
--- PUT file://fx_rates.csv @REFI_FX_RATES;
+-- PUT file://fx_rates.csv @REFI_RAW_TB_FX_RATES;
 -- 
 -- -- Check rate distribution
 -- SELECT FROM_CURRENCY, TO_CURRENCY, COUNT(*) as rate_count
--- FROM REFI_FX_RATES 
+-- FROM REFI_RAW_TB_FX_RATES 
 -- GROUP BY FROM_CURRENCY, TO_CURRENCY;
 --
 -- -- Monitor stream for new data
--- SELECT * FROM REFI_STREAM_FX_RATE_FILES;
+-- SELECT * FROM REFI_RAW_STREAM_FX_RATE_FILES;
 --
 -- -- Check task execution history
 -- SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())
--- WHERE NAME = 'REFI_TASK_LOAD_FX_RATES'
+-- WHERE NAME = 'REFI_RAW_TASK_LOAD_FX_RATES'
 -- ORDER BY SCHEDULED_TIME DESC;
 -- ============================================================
 -- REF_RAW_001 Schema Setup Complete!

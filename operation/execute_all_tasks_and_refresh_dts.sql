@@ -41,7 +41,7 @@
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
 
 -- ============================================================
--- STEP 1: EXECUTE ALL RAW LAYER TASKS (14 tasks)
+-- STEP 1: EXECUTE ALL RAW LAYER TASKS (16 tasks)
 -- ============================================================
 -- These tasks load data from Snowflake stages into RAW tables
 -- Execute in logical order: Master data → Reference data → Transactional data
@@ -50,29 +50,37 @@ USE DATABASE AAA_DEV_SYNTHETIC_BANK;
 SELECT 'STEP 1: Executing RAW layer tasks to load data from stages...' AS status;
 
 -- ============================================================
--- Execute CRM_RAW_001 Tasks (5 tasks)
+-- Execute CRM_RAW_001 Tasks (7 tasks)
 -- ============================================================
 SELECT 'Executing CRM master data tasks...' AS status;
 
 -- Load customers (must run first - master data)
-EXECUTE TASK CRM_RAW_001.CRMI_TASK_LOAD_CUSTOMERS;
-SELECT 'Executed: CRMI_TASK_LOAD_CUSTOMERS' AS status;
+EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMERS;
+SELECT 'Executed: CRMI_RAW_TASK_LOAD_CUSTOMERS' AS status;
 
 -- Load addresses (depends on customers)
-EXECUTE TASK CRM_RAW_001.CRMI_TASK_LOAD_ADDRESSES;
-SELECT 'Executed: CRMI_TASK_LOAD_ADDRESSES' AS status;
+EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_ADDRESSES;
+SELECT 'Executed: CRMI_RAW_TASK_LOAD_ADDRESSES' AS status;
 
 -- Load PEP data (depends on customers)
-EXECUTE TASK CRM_RAW_001.CRMI_TASK_LOAD_EXPOSED_PERSON;
-SELECT 'Executed: CRMI_TASK_LOAD_EXPOSED_PERSON' AS status;
+EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_EXPOSED_PERSON;
+SELECT 'Executed: CRMI_RAW_TASK_LOAD_EXPOSED_PERSON' AS status;
 
 -- Load customer events (depends on customers)
-EXECUTE TASK CRM_RAW_001.CRMI_TASK_LOAD_CUSTOMER_EVENTS;
-SELECT 'Executed: CRMI_TASK_LOAD_CUSTOMER_EVENTS' AS status;
+EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS;
+SELECT 'Executed: CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS' AS status;
 
 -- Load customer status (depends on customers)
-EXECUTE TASK CRM_RAW_001.CRMI_TASK_LOAD_CUSTOMER_STATUS;
-SELECT 'Executed: CRMI_TASK_LOAD_CUSTOMER_STATUS' AS status;
+EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS;
+SELECT 'Executed: CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS' AS status;
+
+-- Load employees (master data - independent)
+EXECUTE TASK CRM_RAW_001.EMPI_RAW_TASK_LOAD_EMPLOYEES;
+SELECT 'Executed: EMPI_RAW_TASK_LOAD_EMPLOYEES' AS status;
+
+-- Load client assignments (depends on employees and customers)
+EXECUTE TASK CRM_RAW_001.EMPI_RAW_TASK_LOAD_ASSIGNMENTS;
+SELECT 'Executed: EMPI_RAW_TASK_LOAD_ASSIGNMENTS' AS status;
 
 -- ============================================================
 -- Execute ACC_RAW_001 Tasks (1 task) - Task is in CRM_RAW_001 schema
@@ -80,8 +88,8 @@ SELECT 'Executed: CRMI_TASK_LOAD_CUSTOMER_STATUS' AS status;
 SELECT 'Executing accounts data task...' AS status;
 
 -- Load accounts (depends on customers)
-EXECUTE TASK CRM_RAW_001.ACCI_TASK_LOAD_ACCOUNTS;
-SELECT 'Executed: ACCI_TASK_LOAD_ACCOUNTS' AS status;
+EXECUTE TASK CRM_RAW_001.ACCI_RAW_TASK_LOAD_ACCOUNTS;
+SELECT 'Executed: ACCI_RAW_TASK_LOAD_ACCOUNTS' AS status;
 
 -- ============================================================
 -- Execute REF_RAW_001 Tasks (1 task)
@@ -89,8 +97,8 @@ SELECT 'Executed: ACCI_TASK_LOAD_ACCOUNTS' AS status;
 SELECT 'Executing reference data tasks...' AS status;
 
 -- Load FX rates (reference data, no dependencies)
-EXECUTE TASK REF_RAW_001.REFI_TASK_LOAD_FX_RATES;
-SELECT 'Executed: REFI_TASK_LOAD_FX_RATES' AS status;
+EXECUTE TASK REF_RAW_001.REFI_RAW_TASK_LOAD_FX_RATES;
+SELECT 'Executed: REFI_RAW_TASK_LOAD_FX_RATES' AS status;
 
 -- ============================================================
 -- Execute PAY_RAW_001 Tasks (2 tasks)
@@ -98,12 +106,12 @@ SELECT 'Executed: REFI_TASK_LOAD_FX_RATES' AS status;
 SELECT 'Executing payment data tasks...' AS status;
 
 -- Load payment transactions (depends on customers, accounts, FX rates)
-EXECUTE TASK PAY_RAW_001.PAYI_TASK_LOAD_TRANSACTIONS;
-SELECT 'Executed: PAYI_TASK_LOAD_TRANSACTIONS' AS status;
+EXECUTE TASK PAY_RAW_001.PAYI_RAW_TASK_LOAD_TRANSACTIONS;
+SELECT 'Executed: PAYI_RAW_TASK_LOAD_TRANSACTIONS' AS status;
 
 -- Load SWIFT messages (depends on customers, accounts)
-EXECUTE TASK PAY_RAW_001.ICGI_TASK_LOAD_SWIFT_MESSAGES;
-SELECT 'Executed: ICGI_TASK_LOAD_SWIFT_MESSAGES' AS status;
+EXECUTE TASK PAY_RAW_001.ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES;
+SELECT 'Executed: ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES' AS status;
 
 -- ============================================================
 -- Execute EQT_RAW_001 Tasks (1 task)
@@ -111,8 +119,8 @@ SELECT 'Executed: ICGI_TASK_LOAD_SWIFT_MESSAGES' AS status;
 SELECT 'Executing equity trading data tasks...' AS status;
 
 -- Load equity trades (depends on customers, accounts, FX rates)
-EXECUTE TASK EQT_RAW_001.EQTI_TASK_LOAD_TRADES;
-SELECT 'Executed: EQTI_TASK_LOAD_TRADES' AS status;
+EXECUTE TASK EQT_RAW_001.EQTI_RAW_TASK_LOAD_TRADES;
+SELECT 'Executed: EQTI_RAW_TASK_LOAD_TRADES' AS status;
 
 -- ============================================================
 -- Execute FII_RAW_001 Tasks (1 task)
@@ -138,17 +146,17 @@ SELECT 'Executed: CMDI_LOAD_TRADES_TASK' AS status;
 SELECT 'Executing loan document tasks...' AS status;
 
 -- Load loan emails
-EXECUTE TASK LOA_RAW_V001.LOAI_TASK_LOAD_EMAILS;
-SELECT 'Executed: LOAI_TASK_LOAD_EMAILS' AS status;
+EXECUTE TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_EMAILS;
+SELECT 'Executed: LOAI_RAW_TASK_LOAD_EMAILS' AS status;
 
 -- Load loan PDF documents
 EXECUTE TASK LOA_RAW_V001.LOAI_TASK_LOAD_DOCUMENTS;
 SELECT 'Executed: LOAI_TASK_LOAD_DOCUMENTS' AS status;
 
-SELECT 'STEP 1 COMPLETE: All 14 RAW layer tasks executed' AS status;
+SELECT 'STEP 1 COMPLETE: All 16 RAW layer tasks executed' AS status;
 
 -- ============================================================
--- STEP 2: REFRESH AGGREGATION LAYER DYNAMIC TABLES (26 tables)
+-- STEP 2: REFRESH AGGREGATION LAYER DYNAMIC TABLES (30 tables)
 -- ============================================================
 -- These DTs transform and aggregate RAW data into business entities
 -- Refresh in logical order: Master data aggregations → Transactional aggregations
@@ -157,7 +165,7 @@ SELECT 'STEP 1 COMPLETE: All 14 RAW layer tasks executed' AS status;
 SELECT 'STEP 2: Refreshing AGGREGATION layer dynamic tables...' AS status;
 
 -- ============================================================
--- Refresh CRM_AGG_001 Dynamic Tables (7 tables: 6 CRM + 1 Account)
+-- Refresh CRM_AGG_001 Dynamic Tables (10 tables: 6 CRM + 1 Account + 3 Employee Analytics)
 -- ============================================================
 SELECT 'Refreshing CRM aggregation tables...' AS status;
 
@@ -188,6 +196,20 @@ ALTER DYNAMIC TABLE CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS REFRESH;
 SELECT 'Refreshed: ACCA_AGG_DT_ACCOUNTS' AS status;
 
 -- ============================================================
+-- Refresh Employee Analytics (3 tables in CRM_AGG_001)
+-- ============================================================
+SELECT 'Refreshing employee analytics tables...' AS status;
+
+ALTER DYNAMIC TABLE CRM_AGG_001.EMPA_AGG_DT_ADVISOR_PERFORMANCE REFRESH;
+SELECT 'Refreshed: EMPA_AGG_DT_ADVISOR_PERFORMANCE' AS status;
+
+ALTER DYNAMIC TABLE CRM_AGG_001.EMPA_AGG_DT_TEAM_LEADER_DASHBOARD REFRESH;
+SELECT 'Refreshed: EMPA_AGG_DT_TEAM_LEADER_DASHBOARD' AS status;
+
+ALTER DYNAMIC TABLE CRM_AGG_001.EMPA_AGG_DT_PORTFOLIO_BY_ADVISOR REFRESH;
+SELECT 'Refreshed: EMPA_AGG_DT_PORTFOLIO_BY_ADVISOR' AS status;
+
+-- ============================================================
 -- Refresh REF_AGG_001 Dynamic Tables (1 table)
 -- ============================================================
 SELECT 'Refreshing reference data aggregation tables...' AS status;
@@ -196,7 +218,7 @@ ALTER DYNAMIC TABLE REF_AGG_001.REFA_AGG_DT_FX_RATES_ENHANCED REFRESH;
 SELECT 'Refreshed: REFA_AGG_DT_FX_RATES_ENHANCED' AS status;
 
 -- ============================================================
--- Refresh PAY_AGG_001 Dynamic Tables (5 tables)
+-- Refresh PAY_AGG_001 Dynamic Tables (6 tables)
 -- ============================================================
 SELECT 'Refreshing payment aggregation tables...' AS status;
 
@@ -205,6 +227,9 @@ SELECT 'Refreshed: PAYA_AGG_DT_TRANSACTION_ANOMALIES' AS status;
 
 ALTER DYNAMIC TABLE PAY_AGG_001.PAYA_AGG_DT_ACCOUNT_BALANCES REFRESH;
 SELECT 'Refreshed: PAYA_AGG_DT_ACCOUNT_BALANCES' AS status;
+
+ALTER DYNAMIC TABLE PAY_AGG_001.PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY REFRESH;
+SELECT 'Refreshed: PAYA_AGG_DT_CUSTOMER_TRANSACTION_SUMMARY' AS status;
 
 ALTER DYNAMIC TABLE PAY_AGG_001.ICGA_AGG_DT_SWIFT_PACS008 REFRESH;
 SELECT 'Refreshed: ICGA_AGG_DT_SWIFT_PACS008' AS status;
@@ -269,7 +294,7 @@ SELECT 'Refreshed: CMDA_AGG_DT_VOLATILITY_ANALYSIS' AS status;
 ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELIVERY_SCHEDULE REFRESH;
 SELECT 'Refreshed: CMDA_AGG_DT_DELIVERY_SCHEDULE' AS status;
 
-SELECT 'STEP 2 COMPLETE: All 26 AGGREGATION layer dynamic tables refreshed' AS status;
+SELECT 'STEP 2 COMPLETE: All 30 AGGREGATION layer dynamic tables refreshed' AS status;
 
 -- ============================================================
 -- STEP 3: REFRESH REPORTING LAYER DYNAMIC TABLES (29 tables)
@@ -405,8 +430,8 @@ SELECT 'STEP 3 COMPLETE: All 29 REPORTING layer dynamic tables refreshed' AS sta
 SELECT
     'EXECUTION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 14 tasks executed and 55 dynamic tables refreshed (26 AGG + 29 REP).' AS summary,
-    'Total: 69 operations completed' AS details,
+    'All 16 tasks executed and 59 dynamic tables refreshed (30 AGG + 29 REP).' AS summary,
+    'Total: 75 operations completed' AS details,
     'Verify data loaded correctly by querying key tables' AS next_step;
 
 -- ============================================================
@@ -415,19 +440,19 @@ SELECT
 /*
 -- Verify RAW layer data loaded
 SELECT 'RAW Layer Verification' AS check_type;
-SELECT 'CRMI_CUSTOMER' AS table_name, COUNT(*) AS row_count FROM CRM_RAW_001.CRMI_CUSTOMER
+SELECT 'CRMI_RAW_TB_CUSTOMER' AS table_name, COUNT(*) AS row_count FROM CRM_RAW_001.CRMI_RAW_TB_CUSTOMER
 UNION ALL
-SELECT 'CRMI_ADDRESSES', COUNT(*) FROM CRM_RAW_001.CRMI_ADDRESSES
+SELECT 'CRMI_RAW_TB_ADDRESSES', COUNT(*) FROM CRM_RAW_001.CRMI_RAW_TB_ADDRESSES
 UNION ALL
-SELECT 'ACCI_ACCOUNTS', COUNT(*) FROM ACCI_RAW_001.ACCI_ACCOUNTS
+SELECT 'ACCI_RAW_TB_ACCOUNTS', COUNT(*) FROM ACCI_RAW_001.ACCI_RAW_TB_ACCOUNTS
 UNION ALL
-SELECT 'PAYI_TRANSACTIONS', COUNT(*) FROM PAY_RAW_001.PAYI_TRANSACTIONS
+SELECT 'PAYI_RAW_TB_TRANSACTIONS', COUNT(*) FROM PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS
 UNION ALL
-SELECT 'EQTI_TRADES', COUNT(*) FROM EQT_RAW_001.EQTI_TRADES
+SELECT 'EQTI_RAW_TB_TRADES', COUNT(*) FROM EQT_RAW_001.EQTI_RAW_TB_TRADES
 UNION ALL
-SELECT 'FIII_TRADES', COUNT(*) FROM FII_RAW_001.FIII_TRADES
+SELECT 'FIII_RAW_TB_TRADES', COUNT(*) FROM FII_RAW_001.FIII_RAW_TB_TRADES
 UNION ALL
-SELECT 'CMDI_TRADES', COUNT(*) FROM CMD_RAW_001.CMDI_TRADES;
+SELECT 'CMDI_RAW_TB_TRADES', COUNT(*) FROM CMD_RAW_001.CMDI_RAW_TB_TRADES;
 
 -- Verify AGG layer data processed
 SELECT 'AGG Layer Verification' AS check_type;

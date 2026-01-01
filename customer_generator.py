@@ -433,6 +433,29 @@ class CustomerGenerator(BaseGenerator):
         
         return test_customer, test_address
     
+    def group_customers_by_current_country(self) -> Dict[str, List[str]]:
+        """
+        Group customers by their current country for employee assignment.
+        Returns a dictionary mapping country -> list of customer_ids
+        """
+        customers_by_country = {}
+        
+        # Get the most recent address for each customer
+        customer_current_address = {}
+        for addr in self.customer_addresses:
+            cust_id = addr.customer_id
+            # Keep the most recent address (addresses are generated in chronological order)
+            customer_current_address[cust_id] = addr
+        
+        # Group by country
+        for cust_id, addr in customer_current_address.items():
+            country = addr.country
+            if country not in customers_by_country:
+                customers_by_country[country] = []
+            customers_by_country[country].append(cust_id)
+        
+        return customers_by_country
+    
     def generate(self) -> Dict[str, Any]:
         """Generate customer data - implementation of abstract method"""
         customers, addresses = self.generate_customers()

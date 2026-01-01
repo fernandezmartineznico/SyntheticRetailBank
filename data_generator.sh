@@ -60,9 +60,9 @@ echo ""
     --customer-update-files 8 \
     --generate-lifecycle \
     --generate-fixed-income \
-    --fixed-income-trades 50 \
+    --fixed-income-trades $((NUM_CUSTOMERS * 5)) \
     --generate-commodities \
-    --commodity-trades 25 \
+    --commodity-trades $((NUM_CUSTOMERS * 2)) \
     --clean
 
 if [ $? -ne 0 ]; then
@@ -194,7 +194,7 @@ echo "🎉 Synthetic Bank Data Generation COMPLETE!"
 echo ""
 echo "📖 Next Steps:"
 echo "   1. Review generated data in: $OUTPUT_DIR/"
-echo "   2. Deploy to Snowflake: ./deploy-structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK"
+echo "   2. Deploy to Snowflake: ./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK"
 echo "   3. Upload data: ./upload-data.sh"
 echo ""
 echo "💡 Usage:"

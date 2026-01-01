@@ -19,7 +19,7 @@
 -- DATABASE STRUCTURE:
 -- - Database: AAA_DEV_SYNTHETIC_BANK_REF_DAP_GLOBAL_SANCTIONS_DATA_SET_COPY
 -- - Schema: PUBLIC
--- - Table: SANCTIONS_DATA_STAGING (optimized for fuzzy matching)
+-- - Table: SANCTIONS_TB_DATA_STAGING (optimized for fuzzy matching)
 -- ============================================================
 
 -- ============================================================
@@ -35,7 +35,7 @@ USE SCHEMA PUBLIC;
 
 -- Create and populate sanctions staging table in one efficient operation
 -- This combines table creation and data population into a single statement
-CREATE OR REPLACE TABLE PUBLIC.SANCTIONS_DATA_STAGING AS
+CREATE OR REPLACE TABLE PUBLIC.SANCTIONS_TB_DATA_STAGING AS
 SELECT 
     ENTITY_ID,
     ENTITY_NAME,

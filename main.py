@@ -27,6 +27,7 @@ from customer_update_generator import CustomerUpdateGenerator
 from fixed_income_generator import FixedIncomeTradeGenerator
 from commodity_generator import CommodityTradeGenerator
 from customer_lifecycle_generator import CustomerLifecycleGenerator
+from employee_generator import EmployeeGenerator
 
 
 def parse_arguments():
@@ -293,6 +294,13 @@ Examples:
         "--generate-lifecycle",
         action="store_true",
         help="Generate customer lifecycle events and status history"
+    )
+    
+    # Employee hierarchy generation options
+    parser.add_argument(
+        "--generate-employees",
+        action="store_true",
+        help="Generate employee hierarchy (client advisors, team leaders, super team leaders)"
     )
     
     # Customer update generation options
