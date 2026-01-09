@@ -71,7 +71,7 @@ USE SCHEMA PAY_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- SWIFT XML message data stage
-CREATE OR REPLACE STAGE ICGI_RAW_STAGE_SWIFT_INBOUND
+CREATE STAGE IF NOT EXISTS ICGI_RAW_STAGE_SWIFT_INBOUND
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

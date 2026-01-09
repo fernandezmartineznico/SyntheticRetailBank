@@ -36,7 +36,7 @@
 -- │
 -- └─ TASKS (2):
 --    ├─ LOAI_RAW_TASK_LOAD_EMAILS      - Automated email ingestion
---    └─ LOAI_TASK_LOAD_DOCUMENTS   - Automated PDF ingestion
+--    └─ LOAI_RAW_TASK_LOAD_DOCUMENTS   - Automated PDF ingestion
 --
 -- DATA ARCHITECTURE:
 -- Email files → LOAI_RAW_STAGE_EMAIL_INBOUND → Stream Detection → Automated Task → Raw Table → DocAI Processing
@@ -57,11 +57,6 @@
 -- ============================================================
 
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
-
--- ============================================================
--- LOA_RAW_v001 SCHEMA - Raw Loan Documents
--- ============================================================
-
 USE SCHEMA LOA_RAW_v001;
 
 -- ============================================================
@@ -71,7 +66,7 @@ USE SCHEMA LOA_RAW_v001;
 -- directory listing enabled for automated file discovery and DocAI integration.
 
 -- Stage for inbound email files (DocAI processing)
-CREATE OR REPLACE STAGE LOAI_RAW_STAGE_EMAIL_INBOUND
+CREATE STAGE IF NOT EXISTS LOAI_RAW_STAGE_EMAIL_INBOUND
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -79,7 +74,7 @@ CREATE OR REPLACE STAGE LOAI_RAW_STAGE_EMAIL_INBOUND
     COMMENT = 'Staging area for loan-related email files awaiting DocAI processing and analysis. Supports various email formats (.eml, .msg, .mbox) for document intelligence extraction, content analysis, and automated loan application processing workflows. Directory listing enabled for batch processing and monitoring of email document ingestion.';
 
 -- Stage for inbound PDF documents (DocAI processing)
-CREATE OR REPLACE STAGE LOAI_RAW_STAGE_PDF_INBOUND
+CREATE STAGE IF NOT EXISTS LOAI_RAW_STAGE_PDF_INBOUND
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -160,7 +155,7 @@ AS
     ON_ERROR = CONTINUE;                             -- Continue processing on individual file errors for resilience
 
 -- Task to automatically load new PDF documents
-CREATE OR REPLACE TASK LOAI_TASK_LOAD_DOCUMENTS
+CREATE OR REPLACE TASK LOAI_RAW_TASK_LOAD_DOCUMENTS
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = '60 MINUTE'
     WHEN SYSTEM$STREAM_HAS_DATA('LOAI_RAW_STREAM_PDF_FILES')
@@ -180,7 +175,7 @@ AS
 
 -- Activate the tasks for production operations
 ALTER TASK LOAI_RAW_TASK_LOAD_EMAILS RESUME;
-ALTER TASK LOAI_TASK_LOAD_DOCUMENTS RESUME;
+ALTER TASK LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
 
 -- ============================================================
 -- SCHEMA COMPLETION STATUS
@@ -191,7 +186,7 @@ ALTER TASK LOAI_TASK_LOAD_DOCUMENTS RESUME;
 -- • 2 Stages: LOAI_RAW_STAGE_EMAIL_INBOUND (emails), LOAI_RAW_STAGE_PDF_INBOUND (PDFs)
 -- • 2 Tables: LOAI_RAW_TB_EMAILS (email repository), LOAI_RAW_TB_DOCUMENTS (PDF repository)
 -- • 2 Streams: LOAI_RAW_STREAM_EMAIL_FILES, LOAI_RAW_STREAM_PDF_FILES (file arrival detection)
--- • 2 Tasks: LOAI_RAW_TASK_LOAD_EMAILS, LOAI_TASK_LOAD_DOCUMENTS (automated ingestion - ACTIVE)
+-- • 2 Tasks: LOAI_RAW_TASK_LOAD_EMAILS, LOAI_RAW_TASK_LOAD_DOCUMENTS (automated ingestion - ACTIVE)
 --
 -- NEXT STEPS:
 -- 1. ✅ LOA_RAW_v001 schema deployed successfully
@@ -221,7 +216,7 @@ ALTER TASK LOAI_TASK_LOAD_DOCUMENTS RESUME;
 -- ORDER BY LOAD_TS DESC LIMIT 10;
 --
 -- MONITORING:
--- - Task status: SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) WHERE NAME IN ('LOAI_RAW_TASK_LOAD_EMAILS', 'LOAI_TASK_LOAD_DOCUMENTS');
+-- - Task status: SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) WHERE NAME IN ('LOAI_RAW_TASK_LOAD_EMAILS', 'LOAI_RAW_TASK_LOAD_DOCUMENTS');
 -- - Stream status: SHOW STREAMS IN SCHEMA LOA_RAW_v001;
 -- - Stage contents: LIST @LOAI_RAW_STAGE_EMAIL_INBOUND; LIST @LOAI_RAW_STAGE_PDF_INBOUND;
 -- - DocAI processing status: Monitor file counts and processing workflows for email and PDF stages

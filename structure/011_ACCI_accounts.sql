@@ -65,7 +65,7 @@ USE SCHEMA CRM_RAW_001;
 -- listing enabled for automated file detection via streams.
 
 -- Account master data stage
-CREATE OR REPLACE STAGE ACCI_RAW_STAGE_ACCOUNTS
+CREATE STAGE IF NOT EXISTS ACCI_RAW_STAGE_ACCOUNTS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

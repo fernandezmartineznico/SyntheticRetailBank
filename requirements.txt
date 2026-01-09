@@ -3,6 +3,7 @@
 # Core data generation
 faker>=19.0.0              # Generate realistic fake data for customers
 numpy>=1.21.0              # Numerical operations for transaction amounts
+pandas>=1.3.0              # DataFrame operations for LCR data generation
 
 # SWIFT message generation
 click>=8.0.0               # Command line interface for SWIFT message generator

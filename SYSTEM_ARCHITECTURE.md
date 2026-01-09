@@ -1,953 +1,657 @@
 # Synthetic Banking System - Architecture Documentation
-**Version**: 2.0 
-**Date**: October 11, 2025 
+
+**Version**: 2.0  
+**Date**: January 2026  
 **Status**: Production Ready
+
+> **Purpose**: This document describes the conceptual architecture, data flows, and integration patterns.  
+> **For deployment instructions**: See [structure/README_DEPLOYMENT.md](structure/README_DEPLOYMENT.md)  
+> **For semantic views**: See [SEMANTIC_VIEWS_QUICK_REFERENCE.md](SEMANTIC_VIEWS_QUICK_REFERENCE.md)
 
 ---
 
 ## Table of Contents
 1. [System Overview](#system-overview)
 2. [Architecture Layers](#architecture-layers)
-3. [Data Flow](#data-flow)
-4. [Snowflake Schema Design](#snowflake-schema-design)
-5. [Python Data Generation](#python-data-generation)
+3. [Data Flow Patterns](#data-flow-patterns)
+4. [Schema Design Principles](#schema-design-principles)
+5. [Python Data Generation Architecture](#python-data-generation-architecture)
 6. [Integration Points](#integration-points)
-7. [Deployment Architecture](#deployment-architecture)
-8. [Security & Compliance](#security--compliance)
+7. [Security & Compliance](#security--compliance)
 
 ---
 
 ## 1. System Overview
 
 ### 1.1 Purpose
-Enterprise-grade synthetic banking data platform for:
+
+Enterprise-grade synthetic banking data platform demonstrating:
 - **Customer Due Diligence (CDD)** testing
-- **Anti-Money Laundering (AML)** detection
-- **Churn Prediction** analytics
+- **Anti-Money Laundering (AML)** detection patterns
+- **Churn Prediction** analytics with ML-ready features
 - **FRTB** (Fundamental Review of Trading Book) compliance
-- **Regulatory Reporting** validation
+- **Regulatory Reporting** (Basel III/IV, BCBS 239, MiFID II)
 
 ### 1.2 Technology Stack
 
 ```
-
- TECHNOLOGY STACK 
-
- Data Warehouse: Snowflake (Dynamic Tables, Tasks) 
- Data Generation: Python 3.12+ (Faker, NumPy, CSV) 
- Version Control: Git 
- Deployment: SnowSQL CLI / Snowflake Web UI 
- Documentation: Markdown, ASCII Diagrams 
-
+┌─────────────────────────────────────────────────────────────┐
+│                    TECHNOLOGY STACK                         │
+├─────────────────────────────────────────────────────────────┤
+│ Data Warehouse: Snowflake (Dynamic Tables, Tasks, Streams) │
+│ Data Generation: Python 3.12+ (Faker, NumPy, CSV)          │
+│ Orchestration:   Bash scripts (automated deployment)       │
+│ Notebooks:       Snowflake Notebooks with Streamlit        │
+│ Version Control: Git                                        │
+│ Documentation:   Markdown, ASCII Diagrams                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### 1.3 System Scope
 
 **Data Domains**:
 - Customer Master Data (EMEA, 12 countries) with SCD Type 2
-- Customer Attribute Updates (employment, account tier, contact info)
-- Account Management
-- Payment Transactions
-- SWIFT ISO20022 Messages
-- Fixed Income Trading (Bonds, Swaps)
-- Equity Trading
-- Commodity Trading
-- FX Rate Management
-- PEP (Politically Exposed Persons)
-- Customer Lifecycle Events (date-based)
-- Churn Prediction
+- Employee Hierarchy & Client-Advisor Relationships
+- Account Management (4 account types)
+- Payment Transactions (multi-currency, anomaly detection)
+- SWIFT ISO20022 Messages (PACS.008, PACS.002)
+- Multi-Asset Trading: Equity, Fixed Income, Commodities
+- FX Rates & Currency Analytics
+- PEP & Sanctions Screening
+- Customer Lifecycle Events (9 event types)
+- Churn Prediction & Risk Classification
 
 **Key Metrics**:
-- 100+ customers (scalable to 10,000+)
-- 1,000+ transactions per month
-- 9 lifecycle event types (5 data-driven, 4 random)
-- 6 lifecycle stages
+- Scalable: 100 → 10,000+ customers
 - 4 trading asset classes
-- SCD Type 2 tracking for customer attributes and addresses
+- 12 EMEA countries
+- 9 lifecycle event types
+- 7 AML anomaly patterns
+- SCD Type 2 tracking for customer attributes, addresses, status, assignments
 
 ---
 
 ## 2. Architecture Layers
 
-### 2.1 Three-Tier Data Architecture
+### 2.1 Four-Tier Data Architecture
 
 ```
-
- SNOWFLAKE DATA ARCHITECTURE 
-
-
-Layer 1: RAW DATA INGESTION (RAW_001 Schemas)
-
- 
- CRM_RAW_001 PAY_RAW_001 ICG_RAW_001 
- 
- • Customers • Payments • SWIFT Msgs 
- • Addresses • Txns 
- • Events 
- • Status 
- • PEP Data 
- 
- ↓ ↓ ↓
- 
- 
- EQT_RAW_001 FII_RAW_001 CMD_RAW_001 
- 
- • Equity • Bonds • Energy 
- Trades • IRS Swaps • Metals 
- • Agri 
- 
-
-Layer 2: AGGREGATION (AGG_001 Schemas)
-
- 
- CRM_AGG_001 PAY_AGG_001 ACC_AGG_001 
- 
- • Customer • Txn • Account 
- 360° View Anomalies Rollups 
- • Customer 
- SCD Type 2 
- • Address 
- SCD Type 2 
- • Lifecycle 
- Analytics 
- 
- ↓ ↓ ↓
-
-Layer 3: REPORTING & ANALYTICS (REP_AGG_001)
-
- 
- REP_AGG_001 
- 
- 
- Customer Anomaly Lifecycle Anomalies 
- Summary Analysis (AML Correlation) 
- 
- 
- 
- FX Risk Portfolio Credit 
- Exposure Analytics Risk 
- 
- 
+┌─────────────────────────────────────────────────────────────────┐
+│              SNOWFLAKE DATA ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Layer 0: EXTERNAL SOURCES                                      │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  • Python Generators → CSV/XML files                     │  │
+│  │  • Snowflake Data Exchange → Global Sanctions Data      │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                          ↓                                      │
+│  Layer 1: RAW DATA INGESTION (RAW_001 Schemas)                 │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  CRM_RAW_001:  Customers, Addresses, PEP, Events        │  │
+│  │  PAY_RAW_001:  Transactions, SWIFT Messages             │  │
+│  │  EQT_RAW_001:  Equity Trades                            │  │
+│  │  FII_RAW_001:  Bonds, Interest Rate Swaps              │  │
+│  │  CMD_RAW_001:  Commodities (Energy, Metals, Agri)      │  │
+│  │  REF_RAW_001:  FX Rates                                 │  │
+│  │                                                           │  │
+│  │  Pattern: Immutable, append-only, source of truth       │  │
+│  │  Loading: Streams → Serverless Tasks (auto-triggered)   │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                          ↓                                      │
+│  Layer 2: AGGREGATION (AGG_001 Schemas)                        │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  CRM_AGG_001:  Customer 360°, SCD Type 2, Lifecycle    │  │
+│  │  PAY_AGG_001:  Anomaly Detection, Account Balances     │  │
+│  │  ACC_AGG_001:  Account Aggregation                     │  │
+│  │  EQT_AGG_001:  Portfolio Positions, Trade Analytics    │  │
+│  │  FII_AGG_001:  Duration, Credit Exposure, Yield Curve  │  │
+│  │  CMD_AGG_001:  Delta Risk, Volatility Analysis         │  │
+│  │  REF_AGG_001:  FX Analytics, Volatility                │  │
+│  │                                                           │  │
+│  │  Pattern: Business logic, single-domain aggregations    │  │
+│  │  Loading: Dynamic Tables (60-min auto-refresh)          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                          ↓                                      │
+│  Layer 3: REPORTING & ANALYTICS (REP_AGG_001)                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Cross-Domain Analytics:                                 │  │
+│  │  • Portfolio Performance (TWR, Sharpe, Risk Metrics)    │  │
+│  │  • Credit Risk IRB (Basel III/IV, RWA)                  │  │
+│  │  • FRTB Market Risk (Sensitivities, Capital Charges)    │  │
+│  │  • BCBS 239 (Risk Aggregation, Data Quality)            │  │
+│  │  • Lifecycle AML Correlation                            │  │
+│  │                                                           │  │
+│  │  Pattern: Multi-domain joins, complex calculations      │  │
+│  │  Loading: Dynamic Tables (60-min auto-refresh)          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                          ↓                                      │
+│  Layer 4: SEMANTIC LAYER (Consolidated Views)                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  5 AI-Ready Semantic Views:                              │  │
+│  │  • CRMA_SV_CUSTOMER_360 (Customer profile + compliance) │  │
+│  │  • EMPA_SV_EMPLOYEE_ADVISOR (Advisor performance)       │  │
+│  │  • PAYA_SV_COMPLIANCE_MONITORING (AML alerts)           │  │
+│  │  • REPA_SV_WEALTH_MANAGEMENT (Portfolio analytics)      │  │
+│  │  • REPA_SV_RISK_REPORTING (Cross-domain risk)           │  │
+│  │                                                           │  │
+│  │  Pattern: AI agent interface, notebook-ready            │  │
+│  │  Loading: Views (real-time)                             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Layer Responsibilities
 
 #### Layer 1: RAW (Source of Truth)
-- **Purpose**: Immutable source data
+- **Purpose**: Immutable source data, audit trail
 - **Pattern**: Append-only, no transformations
-- **Loading**: Serverless tasks with stream-based triggers
-- **Refresh**: Real-time (on file arrival)
+- **Loading**: Stream-triggered serverless tasks
+- **Refresh**: Real-time (on file arrival via PUT command)
+- **Retention**: Permanent (regulatory compliance)
 
 #### Layer 2: AGGREGATION (Business Logic)
-- **Purpose**: Single-domain aggregations and transformations
-- **Pattern**: Dynamic tables with SCD Type 2
+- **Purpose**: Single-domain aggregations, SCD Type 2 tracking
+- **Pattern**: Dynamic tables with business rules
 - **Loading**: Auto-refresh from RAW layer
 - **Refresh**: 60-minute target lag
+- **Features**: Customer 360°, anomaly detection, balance calculation
 
 #### Layer 3: REPORTING (Cross-Domain Analytics)
-- **Purpose**: Multi-domain reporting and ML features
-- **Pattern**: Cross-schema joins, complex calculations
+- **Purpose**: Multi-domain reporting, regulatory calculations
+- **Pattern**: Complex joins, Basel/FRTB/BCBS calculations
 - **Loading**: Auto-refresh from AGG layer
 - **Refresh**: 60-minute target lag
+- **Features**: Portfolio performance, credit risk, market risk, data quality
+
+#### Layer 4: SEMANTIC (AI Interface)
+- **Purpose**: Simplified, AI-agent-friendly views
+- **Pattern**: Consolidated views per business domain
+- **Loading**: Real-time views on AGG/REP layers
+- **Refresh**: Instant (view refresh)
+- **Features**: Natural language queries, notebook integration, AI agents
 
 ---
 
-## 3. Data Flow
+## 3. Data Flow Patterns
 
 ### 3.1 End-to-End Data Pipeline
 
 ```
-Python Data Generators Snowflake Ingestion Analytics
- 
-
- 
- customer_ CSV Files 
- generator.py Internal Stage Dynamic 
- @CRMI_RAW_STAGE_CUSTOMERS Tables 
- 
- Auto 
- pay_transaction CSV Files Refresh 
- _generator.py Internal Stage Every 
- @PAYI_RAW_STAGE_TRANSACTIONS 60 min 
- 
- 
- customer_ CSV Files 
- lifecycle_ Internal Stage 
- generator.py @CRMI_EVENTS 
- 
- 
- 
- swift_message_ XML Files Internal Stage 
- generator.py @ICGI_MESSAGES 
- 
- 
- 
- 
- BI 
- Tools 
- Streams 
- Detect • Churn 
- New Files Model 
- • AML 
- Alerts 
- • Risk 
- Dashbd 
- 
- 
- Serverless 
- Tasks 
- (XSMALL) 
- 
- COPY INTO 
- Tables 
- 
- 
+┌────────────────────────────────────────────────────────────────────┐
+│                    DATA PIPELINE FLOW                              │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  GENERATION                                                        │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  Python Generators                                        │    │
+│  │  ├─ customer_generator.py → customers.csv                │    │
+│  │  ├─ pay_transaction_generator.py → pay_transactions*.csv │    │
+│  │  ├─ equity_generator.py → trades*.csv                    │    │
+│  │  ├─ customer_lifecycle_generator.py → events*.csv        │    │
+│  │  └─ ...13 generators total                               │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓ (PUT command)                           │
+│  INGESTION                                                         │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  Internal Stages (DIRECTORY = ENABLE, AUTO_REFRESH)      │    │
+│  │  ├─ @CRMI_RAW_STAGE_CUSTOMERS                            │    │
+│  │  ├─ @PAYI_RAW_STAGE_TRANSACTIONS                         │    │
+│  │  └─ ...8 stages                                           │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓ (Stream detection)                      │
+│  PROCESSING                                                        │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  Streams detect new files → Tasks execute COPY INTO      │    │
+│  │  ├─ CRMI_RAW_STREAM_CUSTOMER_FILES                       │    │
+│  │  ├─ CRMI_RAW_TASK_LOAD_CUSTOMERS                         │    │
+│  │  └─ Pattern: Stream → Task → Table                       │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓ (Auto-refresh)                          │
+│  AGGREGATION                                                       │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  Dynamic Tables (60-min LAG)                             │    │
+│  │  ├─ CRMA_AGG_DT_CUSTOMER_360 (Customer profile)          │    │
+│  │  ├─ PAYA_AGG_DT_TRANSACTION_ANOMALIES (AML detection)    │    │
+│  │  ├─ REPP_AGG_DT_PORTFOLIO_PERFORMANCE (TWR calculation)  │    │
+│  │  └─ ...40+ dynamic tables                                │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓ (Real-time views)                       │
+│  SEMANTIC LAYER                                                    │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  5 Consolidated Views for AI Agents                      │    │
+│  │  ├─ CRMA_SV_CUSTOMER_360                                 │    │
+│  │  ├─ PAYA_SV_COMPLIANCE_MONITORING                        │    │
+│  │  └─ ...5 semantic views                                  │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓                                         │
+│  CONSUMPTION                                                       │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  • Snowflake Notebooks (8 interactive dashboards)        │    │
+│  │  • AI Agents (CRM_Customer_360, COMPLIANCE_MONITORING)   │    │
+│  │  • BI Tools (Tableau, Power BI, Snowsight)              │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 Customer Lifecycle Data Flow
 
 ```
+┌────────────────────────────────────────────────────────────────────┐
+│              CUSTOMER LIFECYCLE EVENT PIPELINE                     │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  PHASE 1: Data-Driven Events (Cannot be randomly generated)       │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  customer_generator.py                                    │    │
+│  │  └─ ONBOARDING events (from ONBOARDING_DATE)             │    │
+│  │                                                            │    │
+│  │  address_update_generator.py                              │    │
+│  │  └─ ADDRESS_CHANGE events (exact timestamps from CSV)    │    │
+│  │                                                            │    │
+│  │  customer_update_generator.py                             │    │
+│  │  └─ ACCOUNT_UPGRADE, ACCOUNT_DOWNGRADE,                  │    │
+│  │     EMPLOYMENT_CHANGE (exact timestamps)                  │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓                                         │
+│  PHASE 2: Random Events (Controlled generation)                   │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  customer_lifecycle_generator.py                          │    │
+│  │  ├─ ACCOUNT_CLOSE (40% weight, 0-2 per customer)         │    │
+│  │  ├─ REACTIVATION (30% weight, only for closed accounts)  │    │
+│  │  ├─ CHURN (20% weight, 0-2 per customer)                 │    │
+│  │  └─ DORMANT_DETECTED (10% weight, 0-2 per customer)      │    │
+│  │                                                            │    │
+│  │  Rules:                                                    │    │
+│  │  • NO events for dormant customers                        │    │
+│  │  • ONLY REACTIVATION for closed customers                │    │
+│  │  • Time deltas: 30-900 days (normal distribution)        │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓                                         │
+│  STATUS HISTORY GENERATION (SCD Type 2)                           │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  customer_status.csv                                      │    │
+│  │  ├─ Initial: ACTIVE (at onboarding)                      │    │
+│  │  ├─ Transitions: ACCOUNT_CLOSE → CLOSED                  │    │
+│  │  │                CHURN → CLOSED                          │    │
+│  │  │                REACTIVATION → REACTIVATED              │    │
+│  │  └─ SCD Type 2: start_date, end_date, is_current         │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                          ↓                                         │
+│  SNOWFLAKE INGESTION                                              │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  Tables:                                                   │    │
+│  │  ├─ CRMI_RAW_TB_CUSTOMER_EVENT (append-only events)      │    │
+│  │  └─ CRMI_RAW_TB_CUSTOMER_STATUS (SCD Type 2 status)      │    │
+│  │                                                            │    │
+│  │  Dynamic Tables:                                           │    │
+│  │  ├─ CRMA_AGG_DT_CUSTOMER_360 (current status + events)   │    │
+│  │  └─ REPP_AGG_DT_LIFECYCLE_ANOMALIES (AML correlation)    │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
 
- CUSTOMER LIFECYCLE EVENT PIPELINE 
-
-
-Step 1: Data Generation (Python)
-
-
- 
- customer_ address_update_ customer_update_ 
- generator.py generator.py generator.py 
- 
- Creates: Creates: Creates: 
- • customers.csv • address_ • customer_ 
- • Extended updates/*.csv updates/*.csv 
- attributes • Timestamps • Employment 
- • Initial SCD • SCD Type 2 • Account tier 
- 
- 
- 
- 
- 
- customer_lifecycle_ 
- generator.py 
- 
- Phase 1: Data-Driven Events 
- • ONBOARDING (from customer) 
- • ADDRESS_CHANGE (from addr) 
- • ACCOUNT_UPGRADE (cust upd) 
- • ACCOUNT_DOWNGRADE (cust u.)
- • EMPLOYMENT_CHANGE (cust u.)
- 
- Phase 2: Random Events 
- • ACCOUNT_CLOSE 
- • REACTIVATION 
- • CHURN 
- • DORMANT_DETECTED 
- 
- Generates: 
- • customer_events/ (by date) 
- • customer_status.csv 
- 
- 
- 
-
-Step 2: Snowflake Ingestion
-
-
- 
- @CRMI_RAW_STAGE_CUSTOMER_EVENTS Stage 
- 
- PUT customer_events/*.csv 
- PUT customer_status.csv 
- 
- 
- 
- Streams 
- Detect 
- Files 
- 
- 
- 
- 
- 
- CRMI_TASK_LOAD_ CRMI_TASK_LOAD_ 
- CUSTOMER_EVENTS CUSTOMER_STATUS 
- 
- Serverless Serverless 
- Schedule: 5 min Schedule: 5 min 
- 
- 
- 
- 
- CRMI_RAW_TB_CUSTOMER_ CRMI_RAW_TB_CUSTOMER_ 
- EVENT STATUS 
- 
- RAW Layer Table RAW Layer Table 
- Append-Only SCD Type 2 
- 
- 
- 
- 
-
-Step 3: Aggregation Layer
-
-
- 
- CRMA_AGG_DT_CUSTOMER_CURRENT 
- 
- Dynamic Table (Auto-Refresh 60 min) 
- • Latest customer attributes per customer 
- • Operational view (IS_CURRENT = TRUE) 
- • Includes extended attributes (tier, employer)
- 
- 
- 
- CRMA_AGG_DT_CUSTOMER_360 
- 
- Dynamic Table (Auto-Refresh 60 min) 
- • 360° customer view 
- • Joins current customer, address, PEP data 
- • Includes all extended attributes 
- 
- 
- 
- CRMA_AGG_DT_CUSTOMER_360_LIFECYCLE 
- 
- Dynamic Table (Auto-Refresh 60 min) 
- 
- Combines: 
- • Customer 360° view 
- • Current status (from CRMI_RAW_TB_CUSTOMER_STATUS) 
- • Lifecycle events (from CRMI_RAW_TB_CUSTOMER_EVENT) 
- • Transaction activity (from PAYI_RAW_TB_TRANSACTIONS)
- 
- Calculates: 
- • LIFECYCLE_STAGE (6 stages) 
- • CHURN_PROBABILITY (0-100%) 
- • IS_DORMANT (>180 days inactive) 
- • IS_AT_RISK (>90 days inactive) 
- • Event type counts 
- 
- 
- 
-
-Step 4: Reporting Layer
-
-
- 
- REPP_AGG_DT_LIFECYCLE_ANOMALIES 
- 
- Dynamic Table (Auto-Refresh 60 min) 
- 
- Correlates: 
- • Lifecycle events (REACTIVATION, etc.) 
- • Transaction anomalies (from PAY_AGG_001) 
- • Dormancy periods 
- 
- Identifies: 
- • SAR filing candidates 
- • AML risk levels 
- • Suspicious patterns 
- • 30-day correlation window 
- 
- 
- 
- 
- 
- BI Tools / 
- ML Models 
- 
- • Churn Pred 
- • AML Alerts 
- • Retention 
- 
- 
+**Critical Synchronization Points:**
+1. ADDRESS_CHANGE events MUST use exact timestamps from address_updates/*.csv
+2. ACCOUNT_UPGRADE/DOWNGRADE MUST match customer_updates/*.csv timestamps
+3. Churn model uses transaction inactivity, NOT event frequency
+4. AML correlation: 30-day window between lifecycle events and anomalies
 ```
 
 ---
 
-## 4. Snowflake Schema Design
+## 4. Schema Design Principles
 
-### 4.1 Complete Schema Inventory
+### 4.1 Naming Convention
 
+**Schema Pattern**: `{DOMAIN}_{LAYER}_{VERSION}`
+- Example: `CRM_RAW_001`, `PAY_AGG_001`, `REP_AGG_001`
+
+**Object Pattern**: `{DOMAIN}{LAYER}_[OBJECT_TYPE]_{NAME}`
+- `CRMI_RAW_TB_CUSTOMER` = CRM **I**ngestion, **RAW** layer, **T**a**B**le, Customer
+- `CRMA_AGG_DT_CUSTOMER_360` = CRM **A**ggregation, **AGG** layer, **D**ynamic **T**able, Customer 360
+- `CRMI_RAW_STAGE_CUSTOMERS` = CRM Ingestion, Stage, Customers
+- `CRMI_RAW_TASK_LOAD_CUSTOMERS` = CRM Ingestion, Task, Load Customers
+
+**Layer Codes**:
+- **I** = Ingestion (RAW layer)
+- **A** = Aggregation (AGG layer)
+- **P** = Processing/Reporting (REP layer)
+
+**Object Type Codes**:
+- **TB** = Table (raw tables)
+- **DT** = Dynamic Table (aggregation/reporting)
+- **VW** = View
+- **SV** = Semantic View (AI layer)
+- **STAGE** = Internal stage
+- **TASK** = Serverless task
+- **STREAM** = Change data capture stream
+
+### 4.2 SCD Type 2 Pattern
+
+**Customer Attributes** (employment, account tier, risk profile):
 ```
-DATABASE: AAA_DEV_SYNTHETIC_BANK
-
-
-SCHEMA: CRM_RAW_001 (Customer Relationship Management - Raw)
-
-Tables (5):
- • CRMI_RAW_TB_CUSTOMER - Customer master data (SCD Type 2)
- • CRMI_RAW_TB_ADDRESSES - Address history (SCD Type 2, append-only)
- • CRMI_RAW_TB_EXPOSED_PERSON - PEP data
- • CRMI_RAW_TB_CUSTOMER_EVENT - Lifecycle event log (9 event types)
- • CRMI_RAW_TB_CUSTOMER_STATUS - Status history (SCD Type 2)
-
-Stages (4):
- • CRMI_RAW_STAGE_CUSTOMERS
- • CRMI_RAW_STAGE_ADDRESSES
- • CRMI_RAW_STAGE_EXPOSED_PERSON
- • CRMI_RAW_STAGE_CUSTOMER_EVENTS
-
-Tasks (5 - All Serverless):
- • CRMI_RAW_TASK_LOAD_CUSTOMERS
- • CRMI_RAW_TASK_LOAD_ADDRESSES
- • CRMI_RAW_TASK_LOAD_EXPOSED_PERSON
- • CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS
- • CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS
-
-
-
-SCHEMA: CRM_AGG_001 (Customer - Aggregation)
-
-Dynamic Tables (6):
- • CRMA_AGG_DT_ADDRESSES_CURRENT - Latest address per customer
- • CRMA_AGG_DT_ADDRESSES_HISTORY - Full SCD Type 2 address history
- • CRMA_AGG_DT_CUSTOMER_CURRENT - Latest customer attributes per customer
- • CRMA_AGG_DT_CUSTOMER_HISTORY - Full SCD Type 2 customer attribute history
- • CRMA_AGG_DT_CUSTOMER_360 - 360° customer view + PEP/sanctions
- • CRMA_AGG_DT_CUSTOMER_LIFECYCLE - Lifecycle analytics & churn
-
-
-
-SCHEMA: ACC_RAW_001 (Accounts - Raw)
-
-Tables (1):
- • ACCI_RAW_TB_ACCOUNTS - Account master data
-
-
-
-SCHEMA: ACC_AGG_001 (Accounts - Aggregation)
-
-Dynamic Tables (1):
- • ACCA_AGG_DT_ACCOUNTS - Account aggregations
-
-
-
-SCHEMA: PAY_RAW_001 (Payments - Raw)
-
-Tables (1):
- • PAYI_RAW_TB_TRANSACTIONS - Payment transactions
-
-
-
-SCHEMA: PAY_AGG_001 (Payments - Aggregation)
-
-Dynamic Tables (1):
- • PAYA_AGG_DT_TRANSACTION_ANOMALIES - Anomaly detection
-
-
-
-SCHEMA: ICG_RAW_001 (Incoming Payments - Raw)
-
-Tables (1):
- • ICGI_RAW_TB_SWIFT_MESSAGES - SWIFT ISO20022 messages
-
-
-
-SCHEMA: EQT_RAW_001 (Equity - Raw)
-
-Tables (1):
- • EQTI_RAW_TB_TRADES - Equity trade data
-
-
-
-SCHEMA: FII_RAW_001 (Fixed Income - Raw)
-
-Tables (1):
- • FIII_RAW_TB_TRADES - Bond and swap trades
-
-
-
-SCHEMA: CMD_RAW_001 (Commodity - Raw)
-
-Tables (1):
- • CMDI_RAW_TB_TRADES - Commodity trades
-
-
-
-SCHEMA: REF_RAW_001 (Reference Data - Raw)
-
-Tables (1):
- • REFI_RAW_TB_FX_RATES - FX rate time series
-
-
-
-SCHEMA: REP_AGG_001 (Reporting - Cross-Domain Analytics)
-
-Dynamic Tables (10):
- • REPP_AGG_DT_CUSTOMER_SUMMARY
- • REPP_AGG_DT_DAILY_TRANSACTION_SUMMARY
- • REPP_AGG_DT_CURRENCY_EXPOSURE_CURRENT
- • REPP_AGG_DT_CURRENCY_EXPOSURE_HISTORY
- • REPP_AGG_DT_CURRENCY_SETTLEMENT_EXPOSURE
- • REPP_AGG_DT_ANOMALY_ANALYSIS
- • REPP_AGG_DT_HIGH_RISK_PATTERNS
- • REPP_AGG_DT_SETTLEMENT_ANALYSIS
- • REPP_AGG_DT_LIFECYCLE_ANOMALIES - AML lifecycle correlation
- • (Additional tables in 510, 520, 525, 530 files)
+CRMI_RAW_TB_CUSTOMER (base table - append-only)
+  PK: (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)
+  ↓
+CRMA_AGG_DT_CUSTOMER_CURRENT (operational view - latest only)
+  PK: CUSTOMER_ID
+  ↓
+CRMA_AGG_DT_CUSTOMER_HISTORY (analytical view - full history)
+  PK: (CUSTOMER_ID, VALID_FROM)
+  Columns: VALID_FROM, VALID_TO, IS_CURRENT
 ```
 
-### 4.2 Key Table Relationships
-
+**Customer Addresses**:
+```
+CRMI_RAW_TB_ADDRESSES (base table - append-only)
+  PK: (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)
+  ↓
+CRMA_AGG_DT_ADDRESSES_CURRENT (operational view - latest only)
+  PK: CUSTOMER_ID
+  ↓
+CRMA_AGG_DT_ADDRESSES_HISTORY (analytical view - full history)
+  PK: (CUSTOMER_ID, VALID_FROM)
+  Columns: VALID_FROM, VALID_TO, IS_CURRENT
 ```
 
- ENTITY RELATIONSHIP DIAGRAM 
+**Customer Status**:
+```
+CRMI_RAW_TB_CUSTOMER_STATUS (SCD Type 2)
+  PK: STATUS_ID
+  Columns: CUSTOMER_ID, STATUS, START_DATE, END_DATE, IS_CURRENT
+```
 
+**Client-Advisor Assignments**:
+```
+EMPI_RAW_TB_CLIENT_ASSIGNMENT (SCD Type 2)
+  PK: ASSIGNMENT_ID
+  Columns: CUSTOMER_ID, ADVISOR_ID, START_DATE, END_DATE, IS_CURRENT, ASSIGNMENT_REASON
+```
 
- 
- CRMI_RAW_TB_CUSTOMER 
- 
- PK: CUSTOMER_ID, 
- INSERT_TS 
- • first_name 
- • family_name 
- • date_of_birth 
- • onboarding_dt 
- • employer 
- • account_tier 
- • SCD Type 2 
- 
- 
- 1
- 
- 
- * * * 
- 
- CRMI_RAW_TB_ADDRESSES CRMI_RAW_TB_CUSTOMER_ CRMI_RAW_TB_CUSTOMER_ 
- EVENT STATUS 
- PK: CUSTOMER_ID, 
- INSERT_TS PK: EVENT_ID PK: STATUS_ID 
- • street_address FK: CUSTOMER_ID FK: CUSTOMER_ID 
- • city, state 
- • insert_ts_utc • event_type • status 
- (SCD Type 2) • event_date • start_date 
- • event_details • end_date 
- (JSON/VARIANT) • is_current 
- 
- 
- 1
- * 
- 
- ACCI_RAW_TB_ACCOUNTS 
- 
- PK: ACCOUNT_ID 
- FK: CUSTOMER_ID 
- 
- • account_type 
- • base_currency 
- 
- 1
- * 
- 
- PAYI_RAW_TB_TRANSACTIONS
- 
- PK: TRANSACTION 
- _ID 
- FK: CUSTOMER_ID 
- FK: ACCOUNT_ID 
- 
- • amount 
- • booking_date 
- • description 
- 
+### 4.3 Key Relationships
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                  ENTITY RELATIONSHIPS                        │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  CRMI_RAW_TB_CUSTOMER (SCD Type 2)                          │
+│  ├─ PK: (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)                 │
+│  │                                                            │
+│  ├──→ CRMI_RAW_TB_ADDRESSES (1:N, SCD Type 2)               │
+│  │    └─ PK: (CUSTOMER_ID, INSERT_TIMESTAMP_UTC)            │
+│  │                                                            │
+│  ├──→ CRMI_RAW_TB_CUSTOMER_EVENT (1:N, append-only)         │
+│  │    └─ 9 event types: ONBOARDING → CHURN                  │
+│  │                                                            │
+│  ├──→ CRMI_RAW_TB_CUSTOMER_STATUS (1:N, SCD Type 2)         │
+│  │    └─ Status lifecycle: ACTIVE → CLOSED → REACTIVATED    │
+│  │                                                            │
+│  ├──→ ACCI_RAW_TB_ACCOUNTS (1:N)                            │
+│  │    ├─ PK: ACCOUNT_ID                                      │
+│  │    └─ 4 types: CHECKING, SAVINGS, BUSINESS, INVESTMENT   │
+│  │                                                            │
+│  └──→ EMPI_RAW_TB_CLIENT_ASSIGNMENT (1:N, SCD Type 2)       │
+│       └─ Advisor relationship tracking                       │
+│                                                               │
+│  ACCI_RAW_TB_ACCOUNTS                                        │
+│  └──→ PAYI_RAW_TB_TRANSACTIONS (1:N)                         │
+│       ├─ PK: TRANSACTION_ID                                  │
+│       ├─ Multi-currency support                              │
+│       └─ Anomaly patterns embedded in DESCRIPTION            │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Python Data Generation
+## 5. Python Data Generation Architecture
 
-### 5.1 Generator Modules
-
-```
-
- PYTHON DATA GENERATOR ARCHITECTURE 
-
-
-Main Orchestrator:
-
- main.py 
- 
- • Command-line interface (argparse) 
- • Configuration management 
- • Generator orchestration 
- • Summary report generation 
- • Error handling and logging 
-
-
-Core Generators:
- 
- customer_ pay_transaction account_ 
- generator.py _generator.py generator.py 
- 
- • EMEA locale • Anomaly • 4 types 
- • 12 countries patterns • Multi- 
- • Faker lib • Date ranges currency 
- 
-
-Specialized Generators:
- 
- address_update_ customer_update customer_ 
- generator.py _generator.py lifecycle_ 
- generator.py 
- • SCD Type 2 • Employment • 9 event types
- • Time-series • Account tier • 2-phase gen 
- • Multi-file • SCD Type 2 • Data-driven 
- 
-
-
- pep_ 
- generator.py 
- 
- • PEP data 
- • Risk levels 
- • Categories 
-
-
-Trading Generators:
- 
- equity_ fixed_income_ commodity_ 
- generator.py generator.py generator.py 
- 
- • Stock trades • Bonds • Energy 
- • Market data • IRS swaps • Metals 
- • FRTB data • Agricultural 
- 
-
-Message Generators:
- 
- swift_ mortgage_email_
- generator.py generator.py 
- 
- • ISO20022 • PDF emails 
- • XML format • Templates 
- • Parallel proc 
- 
-
-Utility Modules:
- 
- config.py base_generator 
-.py 
- • GeneratorCfg 
- • Constants • Base class 
- 
-```
-
-### 5.2 Customer Lifecycle Generator Architecture
+### 5.1 Generator Modules (13 Generators)
 
 ```
+┌────────────────────────────────────────────────────────────────┐
+│              PYTHON GENERATOR ARCHITECTURE                     │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ORCHESTRATION                                                 │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  main.py (command-line interface)                    │    │
+│  │  ├─ Configuration management (config.py)             │    │
+│  │  ├─ Generator orchestration                          │    │
+│  │  ├─ Summary report generation                        │    │
+│  │  └─ Error handling and logging                       │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                          ↓                                     │
+│  MASTER DATA GENERATORS                                        │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  customer_generator.py                                │    │
+│  │  ├─ EMEA locale (12 countries)                       │    │
+│  │  ├─ Faker library for names/addresses                │    │
+│  │  └─ Extended attributes (employment, tier, risk)     │    │
+│  │                                                        │    │
+│  │  employee_generator.py                                │    │
+│  │  ├─ 3-tier hierarchy (advisors → leaders → super)    │    │
+│  │  ├─ Dynamic scaling (200 clients per advisor)        │    │
+│  │  └─ Performance ratings, certifications              │    │
+│  │                                                        │    │
+│  │  pep_generator.py                                     │    │
+│  │  └─ Politically Exposed Persons data                 │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                          ↓                                     │
+│  TRANSACTION GENERATORS                                        │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  pay_transaction_generator.py                         │    │
+│  │  ├─ 7 anomaly patterns                               │    │
+│  │  ├─ Business hours concentration                     │    │
+│  │  └─ Multi-currency, FX conversion                    │    │
+│  │                                                        │    │
+│  │  equity_generator.py                                  │    │
+│  │  ├─ FIX protocol compliant                           │    │
+│  │  └─ Stock trades with commissions                    │    │
+│  │                                                        │    │
+│  │  fixed_income_generator.py                            │    │
+│  │  ├─ Government bonds (CHF, EUR, USD, GBP)            │    │
+│  │  ├─ Corporate bonds (credit ratings)                 │    │
+│  │  └─ Interest rate swaps (SARON, EURIBOR, SOFR)       │    │
+│  │                                                        │    │
+│  │  commodity_generator.py                               │    │
+│  │  └─ Energy, metals, agricultural (delta risk)        │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                          ↓                                     │
+│  LIFECYCLE GENERATORS                                          │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  customer_lifecycle_generator.py                      │    │
+│  │  ├─ Phase 1: Data-driven events (5 types)            │    │
+│  │  ├─ Phase 2: Random events (4 types)                 │    │
+│  │  └─ Status history (SCD Type 2)                      │    │
+│  │                                                        │    │
+│  │  address_update_generator.py                          │    │
+│  │  └─ SCD Type 2 address changes (time-series)         │    │
+│  │                                                        │    │
+│  │  customer_update_generator.py                         │    │
+│  │  └─ Employment, account tier, risk profile changes   │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                          ↓                                     │
+│  SUPPORTING GENERATORS                                         │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  fx_generator.py                                      │    │
+│  │  └─ Daily FX rates (mid/bid/ask)                     │    │
+│  │                                                        │    │
+│  │  swift_generator.py                                   │    │
+│  │  └─ ISO20022 XML messages (PACS.008, PACS.002)       │    │
+│  │                                                        │    │
+│  │  mortgage_email_generator.py                          │    │
+│  │  └─ Unstructured email threads (PDF documents)       │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
 
- CUSTOMER_LIFECYCLE_GENERATOR.PY (650+ lines) 
+**Performance**: ~1000 transactions/second • Linear scaling to 10K customers
+```
 
+### 5.2 AML Anomaly Pattern Implementation
 
-Class: CustomerLifecycleGenerator
+**7 Anomaly Types** (embedded in transaction descriptions):
 
+1. **Large Amounts** - `[LARGE_AMOUNT]` - Transaction significantly above customer baseline
+2. **High Frequency** - `[HIGH_FREQUENCY]` - Unusual transaction volume per day
+3. **Suspicious Counterparties** - `[SUSPICIOUS_COUNTERPARTY]` - Shell companies, offshore entities
+4. **Round Amounts** - `[ROUND_AMOUNT]` - Exact multiples (10K, 50K, 100K) indicating structuring
+5. **Off-Hours** - `[OFF_HOURS]` - Outside business hours or weekends
+6. **Rapid Succession** - `[RAPID_SUCCESSION]` - Multiple large transactions in short window
+7. **New Beneficiary Large** - `[NEW_BENEFICIARY_LARGE]` - Large amount to new counterparty
 
-Data Model:
- 
- LifecycleEvent CustomerStatus 
- 
- • event_id • status_id 
- • customer_id • customer_id 
- • event_type • status 
- • event_date • start_date 
- • event_timestamp • end_date 
- • channel • is_current 
- • event_details • linked_event_id 
- (JSON) 
- • previous_value 
- • new_value 
- • triggered_by 
- • requires_review 
- • review_status 
- • notes 
- 
-
-Generation Pipeline:
-
-
-Phase 1: Data-Driven Events (Cannot be randomly generated)
- 
- generate_onboarding_events()
- • Source: CRMI_RAW_TB_CUSTOMER.ONBOARDING_DATE
- • One event per customer
- • Channel: ONLINE/BRANCH/MOBILE
- • Includes initial deposit, KYC
- 
- generate_address_change_events()
- • Source: address_update_generator.py outputs
- • CRITICAL: Uses EXACT timestamps from CSV files
- • One-to-one mapping with address updates
- • Includes old/new address in JSON
- 
- generate_customer_update_events()
- • Source: customer_update_generator.py outputs
- • CRITICAL: Uses EXACT timestamps from CSV files
- • Generates: ACCOUNT_UPGRADE, ACCOUNT_DOWNGRADE, EMPLOYMENT_CHANGE
- • One-to-one mapping with customer update files
-
-Phase 2: Random Event Generation (Reduced scope)
- 
- generate_random_events()
- • Number of events per customer: 0-2 (weighted)
- • Time deltas: 30-900 days (normal dist, mean=180)
- • Constraints:
- - NO events for dormant customers
- - ONLY REACTIVATION for closed customers
- 
- Event Types (weighted random selection):
- 
- ACCOUNT_CLOSE (40%)
- • Closure reason, final balance
- 
- REACTIVATION (30%)
- • Reactivation reason, dormancy period
- 
- CHURN (20%)
- • Churn reason, retention attempts
- 
- DORMANT_DETECTED (10%)
- • Dormancy period, inactivity reason
-
-Status History Generation:
- 
- generate_customer_status_history()
- • SCD Type 2 implementation
- • Initial status: ACTIVE (at onboarding)
- • Status changes triggered by:
- - ACCOUNT_CLOSE → CLOSED
- - CHURN → CLOSED
- - REACTIVATION → REACTIVATED
- • Previous status closed with end_date
- • New status created with is_current=TRUE
-
-Output Files:
- 
- customer_events/ (date-based CSV files)
- • All lifecycle events (ONBOARDING → CHURN)
- • JSON event_details with event-specific data
- • Channel and triggered_by tracking
- 
- customer_status.csv
- • SCD Type 2 status history
- • Linked to triggering events
- • Current status flagged (is_current=TRUE)
-
-Key Constraints:
- • ADDRESS_CHANGE: NEVER randomly generated (data-driven only)
- • ACCOUNT_UPGRADE/DOWNGRADE: NEVER randomly generated (data-driven only)
- • EMPLOYMENT_CHANGE: NEVER randomly generated (data-driven only)
- • Timestamps MUST match source generators (address_update, customer_update)
- • Dormant customers: NO events during dormancy
- • Event sequencing: Realistic time deltas
+**Detection Strategy** (in aggregation layer):
+```sql
+-- PAYA_AGG_DT_TRANSACTION_ANOMALIES
+CASE 
+  WHEN DESCRIPTION LIKE '%[LARGE_AMOUNT]%' THEN 'LARGE_AMOUNT_ANOMALY'
+  WHEN DESCRIPTION LIKE '%[HIGH_FREQUENCY]%' THEN 'HIGH_FREQUENCY_ANOMALY'
+  -- ... pattern matching for all 7 types
+END AS ANOMALY_TYPE
 ```
 
 ---
 
 ## 6. Integration Points
 
-### 6.1 External System Integration
+### 6.1 External Data Sources
 
+**Snowflake Data Exchange** (optional):
+```
+┌────────────────────────────────────────────────────────────┐
+│  AAA_DEV_SYNTHETIC_BANK_REF_DAP_GLOBAL_SANCTIONS_DATA_SET  │
+│  └─ Global Sanctions Data (OFAC, EU, UN, UK, CH lists)    │
+│                                                             │
+│  Integration:                                               │
+│  └─ CRMA_AGG_DT_CUSTOMER_360 performs fuzzy matching      │
+│     against SANCTIONS_DATAFEED table                       │
+│                                                             │
+│  Benefits:                                                  │
+│  ├─ Real-time sanctions screening                         │
+│  ├─ Compliance evidence for audits                        │
+│  └─ Regulatory reporting support                          │
+└────────────────────────────────────────────────────────────┘
 ```
 
- EXTERNAL INTEGRATIONS 
+### 6.2 Data Synchronization Rules
 
+**Critical Synchronization Points**:
 
-Data Exchange:
+1. **Address Changes ↔ Lifecycle Events**
+   - `CRMI_RAW_TB_ADDRESSES.INSERT_TIMESTAMP_UTC` MUST MATCH
+   - `CRMI_RAW_TB_CUSTOMER_EVENT.EVENT_TIMESTAMP_UTC` (for ADDRESS_CHANGE events)
+   - ADDRESS_CHANGE events use EXACT timestamps from `address_updates/*.csv`
 
- AAA_DEV_SYNTHETIC_BANK_REF_DAP_GLOBAL_SANCTIONS_DATA_SET_COPY
- 
- • Global Sanctions Data 
- • Fuzzy name matching 
- • CRMA_AGG_DT_CUSTOMER_360 joins for screening 
+2. **Customer Attribute Changes ↔ Lifecycle Events**
+   - `CRMI_RAW_TB_CUSTOMER.INSERT_TIMESTAMP_UTC` MUST MATCH
+   - `CRMI_RAW_TB_CUSTOMER_EVENT.EVENT_TIMESTAMP_UTC` (for ACCOUNT_UPGRADE, EMPLOYMENT_CHANGE)
+   - Customer attribute changes create BOTH:
+     1. New `CRMI_RAW_TB_CUSTOMER` record (SCD Type 2)
+     2. Corresponding lifecycle event with same timestamp
 
+3. **Lifecycle Events → Churn Prediction**
+   - `PAYI_RAW_TB_TRANSACTIONS.LAST_BOOKING_DATE` drives `CHURN_PROBABILITY`
+   - Churn model uses transaction inactivity, NOT event frequency
+   - Dormant customers (>180 days) have NO events by definition
 
-File Upload:
-
- SnowSQL CLI / Python Connector 
- 
- • PUT command for CSV/XML uploads 
- • Automatic file detection via streams 
- • Serverless task execution 
-
-
-BI Tools:
-
- Tableau / Power BI / Snowsight 
- 
- • Direct query to REP_AGG_001 dynamic tables 
- • Churn prediction dashboards 
- • AML alert monitoring 
-
-```
-
-### 6.2 Data Synchronization
-
-```
-Critical Synchronization Points:
-
-
-1. Address Changes ← → Lifecycle Events
- 
- CRMI_RAW_TB_ADDRESSES CRMI_RAW_TB_CUSTOMER_EVENT 
- 
- INSERT_TIMESTAMP_UTC EVENT_TIMESTAMP_UTC 
- MUST (for ADDRESS_CHANGE) 
- (from generator) MATCH (from generator) 
- 
- 
- CRITICAL: ADDRESS_CHANGE events must use exact timestamps
- from address_update_generator.py outputs
-
-1b. Customer Attribute Changes ← → Lifecycle Events
- 
- CRMI_RAW_TB_CUSTOMER (SCD2) CRMI_RAW_TB_CUSTOMER_EVENT 
- 
- INSERT_TIMESTAMP_UTC EVENT_TIMESTAMP_UTC 
- MUST (ACCOUNT_UPGRADE, 
- (from cust_updates/) MATCH EMPLOYMENT_CHANGE) 
- 
- 
- CRITICAL: Customer attribute changes create both:
- 1. New CRMI_RAW_TB_CUSTOMER record (SCD Type 2)
- 2. Corresponding lifecycle event with same timestamp
-
-2. Lifecycle Events → Churn Prediction
- 
- PAYI_RAW_TB_TRANSACTIONS CRMA_AGG_DT_CUSTOMER_360_
- LIFECYCLE 
- LAST_BOOKING_DATE 
- Drives CHURN_PROBABILITY 
- (transaction-based) NOT (NOT event-based) 
- 
- 
-NOTE: Churn model uses transaction inactivity, not event frequency
-because dormant customers have NO events by definition
-
-3. Lifecycle Events → AML Correlation
- 
- CRMI_RAW_TB_CUSTOMER_EVENT PAYA_AGG_DT_ 
- TRANSACTION_ANOMALIES
- EVENT_DATE BOOKING_DATE 
- 30-day 
- (REACTIVATION, etc.) window (anomalies) 
- 
- 
-REPP_AGG_DT_LIFECYCLE_ANOMALIES correlates high-risk
-lifecycle events with suspicious transactions
-```
+4. **Lifecycle Events → AML Correlation**
+   - `CRMI_RAW_TB_CUSTOMER_EVENT.EVENT_DATE` within 30-day window of
+   - `PAYA_AGG_DT_TRANSACTION_ANOMALIES.BOOKING_DATE`
+   - `REPP_AGG_DT_LIFECYCLE_ANOMALIES` correlates high-risk events with suspicious transactions
 
 ---
 
-## 7. Deployment Architecture
+## 7. Security & Compliance
 
-### 7.1 Deployment Topology
-
-```
-
- DEPLOYMENT ARCHITECTURE 
-
-
-Development Environment:
-
- Local Development 
- 
- 
- 
- Python 3.12+ Git Repository 
- Virtual Env (Version Ctrl) 
- 
- 
- 
- 
- 
- Generated CSV/ 
- XML Files 
- 
- 
-
- 
- SnowSQL PUT / Upload
- 
-
- Snowflake Cloud 
- 
- 
- 
- AAA_DEV_SYNTHETIC_BANK Database 
- 
- 
- Internal Serverless Dynamic 
- Stages → Tasks → Tables 
- 
- Auto-Ingest Stream-based Auto-Refresh 
- 
- 
- 
- Compute: MD_TEST_WH (XSMALL) 
- • Used by Dynamic Tables 
- • Auto-suspend: 5 minutes 
- • Auto-resume: Enabled 
- 
- 
- 
-
- 
- ODBC / JDBC / Snowpark
- 
-
- Business Intelligence Layer 
- 
- 
- 
- Snowsight Tableau Power BI 
- 
- • SQL queries • Dashboards • Reports 
- • Dashboards • Visual • Visual 
- 
- 
- 
- ML / AI Layer 
- 
- • Snowpark ML (Churn Prediction) 
- • Python UDF (Custom Models) 
- • AML Alert Engine 
- 
+### 7.1 Data Classification (Snowflake Tags)
 
 ```
+┌────────────────────────────────────────────────────────────┐
+│           DATA SENSITIVITY CLASSIFICATION                  │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  Tag: SENSITIVITY_LEVEL                                    │
+│                                                            │
+│  TOP_SECRET:                                               │
+│  ├─ CRMI_RAW_TB_CUSTOMER.CUSTOMER_ID                      │
+│  ├─ CRMI_RAW_TB_ADDRESSES.STREET_ADDRESS                  │
+│  └─ PAYI_RAW_TB_TRANSACTIONS.TRANSACTION_ID               │
+│                                                            │
+│  RESTRICTED:                                               │
+│  ├─ CRMI_RAW_TB_CUSTOMER.FIRST_NAME                       │
+│  ├─ CRMI_RAW_TB_CUSTOMER.FAMILY_NAME                      │
+│  ├─ PAYI_RAW_TB_TRANSACTIONS.AMOUNT                       │
+│  └─ PAYI_RAW_TB_TRANSACTIONS.COUNTERPARTY_ACCOUNT         │
+│                                                            │
+│  PUBLIC:                                                   │
+│  ├─ REFI_RAW_TB_FX_RATES (all fields)                     │
+│  └─ Reference data (no PII)                               │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
 
+### 7.2 Regulatory Compliance Features
 
+**GDPR & Data Protection**:
+- Automated PII tagging with `SENSITIVITY_LEVEL`
+- Data minimization in aggregation layers
+- Audit trail via SCD Type 2 tracking
+
+**Basel III/IV**:
+- IRB approach: PD, LGD, EAD modeling
+- RWA calculation in `REPP_AGG_DT_IRB_RWA_SUMMARY`
+- Capital adequacy ratios
+
+**FRTB**:
+- Market risk sensitivities (delta, vega, curvature)
+- Capital charges by risk class
+- Non-Modellable Risk Factor (NMRF) identification
+
+**BCBS 239**:
+- Risk data aggregation across domains
+- Data quality monitoring (completeness, accuracy, timeliness)
+- Regulatory reporting capabilities
+
+**MiFID II**:
+- Best execution tracking
+- Transaction cost analysis
+- Client reporting (TWR, Sharpe ratio)
 
 ---
 
-## 8. Security & Compliance
+## Appendix: Domain Prefixes Reference
 
-### 8.1 Data Classification
+| Prefix | Domain | Layer | Example |
+|--------|--------|-------|---------|
+| **CRMI** | Customer Master | Ingestion (RAW) | `CRMI_RAW_TB_CUSTOMER` |
+| **CRMA** | Customer Master | Aggregation (AGG) | `CRMA_AGG_DT_CUSTOMER_360` |
+| **ACCI** | Accounts | Ingestion (RAW) | `ACCI_RAW_TB_ACCOUNTS` |
+| **ACCA** | Accounts | Aggregation (AGG) | `ACCA_AGG_DT_ACCOUNTS` |
+| **EMPI** | Employees | Ingestion (RAW) | `EMPI_RAW_TB_EMPLOYEE` |
+| **EMPA** | Employees | Aggregation (AGG) | `EMPA_AGG_DT_ADVISOR_PERFORMANCE` |
+| **PAYI** | Payments | Ingestion (RAW) | `PAYI_RAW_TB_TRANSACTIONS` |
+| **PAYA** | Payments | Aggregation (AGG) | `PAYA_AGG_DT_TRANSACTION_ANOMALIES` |
+| **EQTI** | Equity Trading | Ingestion (RAW) | `EQTI_RAW_TB_TRADES` |
+| **EQTA** | Equity Trading | Aggregation (AGG) | `EQTA_AGG_DT_PORTFOLIO_POSITIONS` |
+| **FIII** | Fixed Income | Ingestion (RAW) | `FIII_RAW_TB_TRADES` |
+| **FIIA** | Fixed Income | Aggregation (AGG) | `FIIA_AGG_DT_YIELD_CURVE` |
+| **CMDI** | Commodities | Ingestion (RAW) | `CMDI_RAW_TB_TRADES` |
+| **CMDA** | Commodities | Aggregation (AGG) | `CMDA_AGG_DT_DELTA_EXPOSURE` |
+| **REFI** | Reference Data | Ingestion (RAW) | `REFI_RAW_TB_FX_RATES` |
+| **REFA** | Reference Data | Aggregation (AGG) | `REFA_AGG_DT_FX_RATES_ENHANCED` |
+| **ICGI** | SWIFT Messages | Ingestion (RAW) | `ICGI_RAW_TB_SWIFT_MESSAGES` |
+| **ICGA** | SWIFT Messages | Aggregation (AGG) | `ICGA_AGG_DT_SWIFT_PAYMENT_LIFECYCLE` |
+| **REPP** | Reporting | Processing (REP) | `REPP_AGG_DT_PORTFOLIO_PERFORMANCE` |
 
-```
+---
 
- DATA SENSITIVITY CLASSIFICATION 
-
-
-Tag: SENSITIVITY_LEVEL (Snowflake Tag)
-
-
-Top Secret:
- • CRMI_RAW_TB_CUSTOMER.CUSTOMER_ID
- • CRMI_RAW_TB_CUSTOMER_CONTACT.CONTACT_VALUE (addresses, emails, phones)
- • PAYI_RAW_TB_TRANSACTIONS.TRANSACTION_ID
-
-Restricted:
- • CRMI_RAW_TB_CUSTOMER.FIRST_NAME
- • CRMI_RAW_TB_CUSTOMER.FAMILY_NAME
- • CRMI_RAW_TB_CUSTOMER.DATE_OF_BIRTH
- • CRMI_RAW_TB_CUSTOMER.HAS_ANOMALY
- • CRMI_RAW_TB_CUSTOMER_EVENT.NOTES (free-text lifecycle notes)
-
-Public:
- • REFI_RAW_TB_FX_RATES (all fields)
- • Reference data
-
-
-**End of System Architecture Documentation**
+**Document Version**: 2.0  
+**Last Updated**: January 2026  
+**Maintained By**: Architecture Team  
+**Next Review**: Q2 2026
 

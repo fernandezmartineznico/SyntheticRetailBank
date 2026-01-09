@@ -19,10 +19,11 @@
 # - Single file debugging support
 #
 # Usage:
-#   ./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=my_connection
+#   ./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=my_connection [--upload-data=YES|NO]
 #
-# Example:
+# Examples:
 #   ./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection>
+#   ./deploy_structure.sh --DATABASE=AAA_DEV_SYNTHETIC_BANK --CONNECTION_NAME=<my-sf-connection> --upload-data=NO
 # =============================================================================
 
 set -e
@@ -30,6 +31,7 @@ set -e
 # --- Default values ---
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_DIR="$BASE_DIR/structure"
+UPLOAD_DATA="YES"
 
 # --- Parse arguments ---
 for ARG in "$@"; do
@@ -46,12 +48,19 @@ for ARG in "$@"; do
     --FILE=*)
       SINGLE_FILE="${ARG#*=}"
       ;;
+    --upload-data=*)
+      UPLOAD_DATA="${ARG#*=}"
+      if [[ "$UPLOAD_DATA" != "YES" && "$UPLOAD_DATA" != "NO" ]]; then
+        echo "❌ Invalid value for --upload-data: $UPLOAD_DATA (must be YES or NO)"
+        exit 1
+      fi
+      ;;
     --DRY_RUN)
       DRY_RUN=true
       ;;
     *)
       echo "❌ Unknown argument: $ARG"
-      echo "Usage: $0 --DATABASE=... --CONNECTION_NAME=... [--SQL_DIR=...] [--FILE=...] [--DRY_RUN]"
+      echo "Usage: $0 --DATABASE=... --CONNECTION_NAME=... [--SQL_DIR=...] [--FILE=...] [--upload-data=YES|NO] [--DRY_RUN]"
       exit 1
       ;;
   esac
@@ -60,13 +69,14 @@ done
 # --- Validate required inputs ---
 if [[ -z "$DATABASE" || -z "$CONNECTION_NAME" ]]; then
   echo "❌ Missing required arguments."
-  echo "Usage: $0 --DATABASE=... --CONNECTION_NAME=... [--SQL_DIR=...] [--FILE=...] [--DRY_RUN]"
+  echo "Usage: $0 --DATABASE=... --CONNECTION_NAME=... [--SQL_DIR=...] [--FILE=...] [--upload-data=YES|NO] [--DRY_RUN]"
   echo ""
   echo "Arguments:"
   echo "  --DATABASE=...        Target database name"
   echo "  --CONNECTION_NAME=... Snowflake connection name"
   echo "  --SQL_DIR=...         Path to SQL files (default: ./structure)"
   echo "  --FILE=...            Test a single SQL file (e.g., 035_ICGI_swift_messages.sql)"
+  echo "  --upload-data=YES|NO  Upload data after structure deployment (default: YES)"
   echo "  --DRY_RUN            Show what would be executed without running"
   exit 1
 fi
@@ -81,6 +91,7 @@ echo "=================================="
 echo "📁 SQL Directory: $SQL_DIR"
 echo "🗄️  Database: $DATABASE"
 echo "🔗 Connection: $CONNECTION_NAME"
+echo "📤 Upload Data: $UPLOAD_DATA"
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "🔍 Mode: DRY RUN (no actual execution)"
 fi
@@ -156,7 +167,7 @@ for FILE in $SQL_FILES; do
   else
     echo "   🚀 Executing SQL..."
     set +e
-    snow sql -c "$CONNECTION_NAME" -f "$TMP_FILE"
+    snow sql -c "$CONNECTION_NAME" -f "$TMP_FILE" --enable-templating NONE
     RESULT=$?
     set -e
 
@@ -217,7 +228,7 @@ else
   # AUTOMATIC DATA UPLOAD AFTER SUCCESSFUL DEPLOYMENT
   # =============================================================================
   # Only trigger data upload for full deployments, not single file tests
-  if [[ -z "$SINGLE_FILE" ]]; then
+  if [[ -z "$SINGLE_FILE" && "$UPLOAD_DATA" == "YES" ]]; then
     echo ""
     echo "📤 AUTOMATIC DATA UPLOAD"
     echo "========================"
@@ -265,7 +276,7 @@ else
           echo ""
           
           # Run the execution script
-          snow sql -c "$CONNECTION_NAME" -f ./operation/execute_all_tasks_and_refresh_dts.sql
+          snow sql -c "$CONNECTION_NAME" -f ./operation/execute_all_tasks_and_refresh_dts.sql --enable-templating NONE
           
           if [[ $? -eq 0 ]]; then
             echo ""
@@ -358,6 +369,11 @@ else
       echo "💡 To upload data manually, run:"
       echo "   ./upload-data.sh --CONNECTION_NAME=$CONNECTION_NAME"
     fi
+  elif [[ -z "$SINGLE_FILE" && "$UPLOAD_DATA" == "NO" ]]; then
+    echo ""
+    echo "⏭️  Data upload skipped (--upload-data=NO)"
+    echo "💡 To upload data manually later, run:"
+    echo "   ./upload-data.sh --CONNECTION_NAME=$CONNECTION_NAME"
   else
     echo ""
     echo "🔍 Single file test completed - Data upload skipped"

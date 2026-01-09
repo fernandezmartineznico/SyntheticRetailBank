@@ -41,7 +41,7 @@
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
 
 -- ============================================================
--- STEP 1: EXECUTE ALL RAW LAYER TASKS (16 tasks)
+-- STEP 1: EXECUTE ALL RAW LAYER TASKS (18 tasks)
 -- ============================================================
 -- These tasks load data from Snowflake stages into RAW tables
 -- Execute in logical order: Master data → Reference data → Transactional data
@@ -150,10 +150,23 @@ EXECUTE TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_EMAILS;
 SELECT 'Executed: LOAI_RAW_TASK_LOAD_EMAILS' AS status;
 
 -- Load loan PDF documents
-EXECUTE TASK LOA_RAW_V001.LOAI_TASK_LOAD_DOCUMENTS;
-SELECT 'Executed: LOAI_TASK_LOAD_DOCUMENTS' AS status;
+EXECUTE TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_DOCUMENTS;
+SELECT 'Executed: LOAI_RAW_TASK_LOAD_DOCUMENTS' AS status;
 
-SELECT 'STEP 1 COMPLETE: All 16 RAW layer tasks executed' AS status;
+-- ============================================================
+-- Execute REP_RAW_001 Tasks (2 tasks - FINMA LCR)
+-- ============================================================
+SELECT 'Executing FINMA LCR regulatory reporting tasks...' AS status;
+
+-- Load HQLA holdings (High-Quality Liquid Assets)
+EXECUTE TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS;
+SELECT 'Executed: LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS' AS status;
+
+-- Load deposit balances
+EXECUTE TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES;
+SELECT 'Executed: LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES' AS status;
+
+SELECT 'STEP 1 COMPLETE: All 18 RAW layer tasks executed' AS status;
 
 -- ============================================================
 -- STEP 2: REFRESH AGGREGATION LAYER DYNAMIC TABLES (30 tables)
@@ -297,7 +310,7 @@ SELECT 'Refreshed: CMDA_AGG_DT_DELIVERY_SCHEDULE' AS status;
 SELECT 'STEP 2 COMPLETE: All 30 AGGREGATION layer dynamic tables refreshed' AS status;
 
 -- ============================================================
--- STEP 3: REFRESH REPORTING LAYER DYNAMIC TABLES (29 tables)
+-- STEP 3: REFRESH REPORTING LAYER DYNAMIC TABLES (31 tables)
 -- ============================================================
 -- These DTs implement business logic, risk calculations, and regulatory reporting
 -- Refresh in logical order: Basic reports → Advanced analytics → Regulatory reports
@@ -422,7 +435,18 @@ SELECT 'Refreshing portfolio performance reporting tables...' AS status;
 ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_PORTFOLIO_PERFORMANCE REFRESH;
 SELECT 'Refreshed: REPP_AGG_DT_PORTFOLIO_PERFORMANCE' AS status;
 
-SELECT 'STEP 3 COMPLETE: All 29 REPORTING layer dynamic tables refreshed' AS status;
+-- ============================================================
+-- Refresh REP_AGG_001 Dynamic Tables (FINMA LCR - 2 tables)
+-- ============================================================
+SELECT 'Refreshing FINMA LCR liquidity reporting tables...' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_HQLA_CALCULATION REFRESH;
+SELECT 'Refreshed: REPP_AGG_DT_LCR_HQLA_CALCULATION' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_OUTFLOW_CALCULATION REFRESH;
+SELECT 'Refreshed: REPP_AGG_DT_LCR_OUTFLOW_CALCULATION' AS status;
+
+SELECT 'STEP 3 COMPLETE: All 31 REPORTING layer dynamic tables refreshed' AS status;
 
 -- ============================================================
 -- COMPLETION SUMMARY
@@ -430,8 +454,8 @@ SELECT 'STEP 3 COMPLETE: All 29 REPORTING layer dynamic tables refreshed' AS sta
 SELECT
     'EXECUTION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 16 tasks executed and 59 dynamic tables refreshed (30 AGG + 29 REP).' AS summary,
-    'Total: 75 operations completed' AS details,
+    'All 18 tasks executed and 61 dynamic tables refreshed (30 AGG + 31 REP).' AS summary,
+    'Total: 79 operations completed' AS details,
     'Verify data loaded correctly by querying key tables' AS next_step;
 
 -- ============================================================

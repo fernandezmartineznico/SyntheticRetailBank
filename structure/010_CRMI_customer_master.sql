@@ -24,8 +24,8 @@
 -- OBJECTS CREATED:
 -- ┌─ STAGES (4):
 -- │  ├─ CRMI_RAW_STAGE_CUSTOMERS        - Customer master data files
--- │  ├─ CRMI_RAW_TB_ADDRESSES        - Customer address files (SCD Type 2)
--- │  ├─ CRMI_RAW_TB_EXPOSED_PERSON   - Politically Exposed Persons files
+-- │  ├─ CRMI_RAW_STAGE_ADDRESSES        - Customer address files (SCD Type 2)
+-- │  ├─ CRMI_RAW_STAGE_EXPOSED_PERSON   - Politically Exposed Persons files
 -- │  └─ CRMI_RAW_STAGE_CUSTOMER_EVENTS  - Lifecycle events and status files
 -- │
 -- ┌─ FILE FORMATS (5):
@@ -73,7 +73,7 @@ USE SCHEMA CRM_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Customer master data stage
-CREATE OR REPLACE STAGE CRMI_RAW_STAGE_CUSTOMERS
+CREATE STAGE IF NOT EXISTS CRMI_RAW_STAGE_CUSTOMERS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -81,7 +81,7 @@ CREATE OR REPLACE STAGE CRMI_RAW_STAGE_CUSTOMERS
     COMMENT = 'Internal stage for customer master data CSV files. Expected pattern: *customers*.csv';
 
 -- Customer address data stage (SCD Type 2)
-CREATE OR REPLACE STAGE CRMI_RAW_STAGE_ADDRESSES
+CREATE STAGE IF NOT EXISTS CRMI_RAW_STAGE_ADDRESSES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -89,7 +89,7 @@ CREATE OR REPLACE STAGE CRMI_RAW_STAGE_ADDRESSES
     COMMENT = 'Internal stage for customer address CSV files with SCD Type 2 support. Expected pattern: *customer_addresses*.csv';
 
 -- Politically Exposed Person compliance data stage
-CREATE OR REPLACE STAGE CRMI_RAW_STAGE_EXPOSED_PERSON
+CREATE STAGE IF NOT EXISTS CRMI_RAW_STAGE_EXPOSED_PERSON
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -97,7 +97,7 @@ CREATE OR REPLACE STAGE CRMI_RAW_STAGE_EXPOSED_PERSON
     COMMENT = 'Internal stage for PEP (Politically Exposed Persons) compliance CSV files. Expected pattern: *pep*.csv';
 
 -- Customer lifecycle events stage
-CREATE OR REPLACE STAGE CRMI_RAW_STAGE_CUSTOMER_EVENTS
+CREATE STAGE IF NOT EXISTS CRMI_RAW_STAGE_CUSTOMER_EVENTS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

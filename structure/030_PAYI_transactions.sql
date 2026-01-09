@@ -58,7 +58,7 @@ USE SCHEMA PAY_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Payment transaction data stage
-CREATE OR REPLACE STAGE PAYI_RAW_STAGE_TRANSACTIONS
+CREATE STAGE IF NOT EXISTS PAYI_RAW_STAGE_TRANSACTIONS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

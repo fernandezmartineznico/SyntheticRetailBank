@@ -40,6 +40,7 @@ echo "  ✓ Customer updates (employment, account tier)"
 echo "  ✓ Customer lifecycle events & status history"
 echo "  ✓ Fixed income trades (bonds & swaps)"
 echo "  ✓ Commodity trades (energy, metals, agricultural)"
+echo "  ✓ FINMA LCR data (HQLA holdings & deposit balances)"
 echo ""
 
 ./venv/bin/python main.py \
@@ -72,7 +73,34 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "✅ PASSED: All data generated successfully"
+echo "✅ PASSED: Banking data generated successfully"
+
+echo ""
+echo "=================================================="
+echo "Generating FINMA LCR Data (Liquidity Coverage Ratio)"
+echo "=================================================="
+echo "Configuration:"
+echo "  - Days: 90 (3 months)"
+echo "  - Customers: Linked to actual customer base"
+echo "  - Output: $OUTPUT_DIR/lcr/"
+echo ""
+
+# Link deposits to actual customers from master data
+./venv/bin/python lcr_data_generator.py \
+    --days 90 \
+    --customer-file "$OUTPUT_DIR/master_data/customers.csv" \
+    --output-dir "$OUTPUT_DIR/lcr"
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ FAILED: LCR data generation failed"
+    echo "💡 If you see 'No module named pandas', run:"
+    echo "   ./venv/bin/pip install -r requirements.txt"
+    exit 1
+fi
+
+echo ""
+echo "✅ PASSED: LCR data generated successfully"
 
 echo ""
 echo "=================================================="
@@ -126,6 +154,8 @@ SWIFT_FILES=$(find "${OUTPUT_DIR}/swift_messages" -name "*.xml" 2>/dev/null | wc
 EMAIL_FILES=$(find "${OUTPUT_DIR}/emails" -name "*.eml" 2>/dev/null | wc -l | tr -d ' ')
 FI_FILES=$(find "${OUTPUT_DIR}/fixed_income_trades" -name "*.csv" 2>/dev/null | wc -l | tr -d ' ')
 COMMODITY_FILES=$(find "${OUTPUT_DIR}/commodity_trades" -name "*.csv" 2>/dev/null | wc -l | tr -d ' ')
+LCR_HQLA_FILES=$(find "${OUTPUT_DIR}/lcr" -name "hqla_holdings_*.csv" 2>/dev/null | wc -l | tr -d ' ')
+LCR_DEPOSIT_FILES=$(find "${OUTPUT_DIR}/lcr" -name "deposit_balances_*.csv" 2>/dev/null | wc -l | tr -d ' ')
 
 echo ""
 echo "📊 File Counts:"
@@ -139,6 +169,8 @@ echo "   SWIFT messages: $SWIFT_FILES"
 echo "   Mortgage emails: $EMAIL_FILES"
 echo "   Fixed income files: $FI_FILES"
 echo "   Commodity files: $COMMODITY_FILES"
+echo "   LCR HQLA holdings: $LCR_HQLA_FILES"
+echo "   LCR deposit balances: $LCR_DEPOSIT_FILES"
 
 # Count records
 CUSTOMER_COUNT=$(tail -n +2 "${OUTPUT_DIR}/master_data/customers.csv" 2>/dev/null | wc -l | tr -d ' ')
@@ -188,7 +220,10 @@ echo "   ├── fixed_income_trades/ ($FI_FILES files)"
 echo "   ├── commodity_trades/ ($COMMODITY_FILES files)"
 echo "   ├── fx_rates/ ($FX_FILES files)"
 echo "   ├── swift_messages/ ($SWIFT_FILES XML files)"
-echo "   └── emails/ ($EMAIL_FILES email files)"
+echo "   ├── emails/ ($EMAIL_FILES email files)"
+echo "   └── lcr/"
+echo "       ├── hqla_holdings_*.csv ($LCR_HQLA_FILES files)"
+echo "       └── deposit_balances_*.csv ($LCR_DEPOSIT_FILES files)"
 echo ""
 echo "🎉 Synthetic Bank Data Generation COMPLETE!"
 echo ""

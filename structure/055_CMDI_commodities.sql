@@ -52,7 +52,7 @@ USE SCHEMA CMD_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Commodity trade data stage
-CREATE OR REPLACE STAGE CMDI_RAW_STAGE_TRADES
+CREATE STAGE IF NOT EXISTS CMDI_RAW_STAGE_TRADES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

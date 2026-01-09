@@ -133,7 +133,7 @@ ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELIVERY_SCHEDULE RESUME;
 
 
 -- ============================================================
--- RESUME ALL TASKS (16 total across all schemas)
+-- RESUME ALL TASKS (18 total across all schemas)
 -- ============================================================
 SELECT 'Resuming tasks...' AS status;
 
@@ -167,7 +167,11 @@ ALTER TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK RESUME;
 
 -- Resume LOA_RAW_V001 Tasks (2 tasks)
 ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_EMAILS RESUME;
-ALTER TASK LOA_RAW_V001.LOAI_TASK_LOAD_DOCUMENTS RESUME;
+ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
+
+-- Resume REP_RAW_001 Tasks (2 tasks - FINMA LCR)
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS RESUME;
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES RESUME;
 
 -- ============================================================
 -- COMPLETION MESSAGE

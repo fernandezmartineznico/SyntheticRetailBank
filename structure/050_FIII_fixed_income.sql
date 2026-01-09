@@ -52,7 +52,7 @@ USE SCHEMA FII_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- Fixed income trade data stage
-CREATE OR REPLACE STAGE FIII_RAW_STAGE_TRADES
+CREATE STAGE IF NOT EXISTS FIII_RAW_STAGE_TRADES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

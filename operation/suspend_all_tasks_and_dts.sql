@@ -133,7 +133,7 @@ ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELIVERY_SCHEDULE SUSPEND;
 
 
 -- ============================================================
--- SUSPEND ALL TASKS (16 total across all schemas)
+-- SUSPEND ALL TASKS (18 total across all schemas)
 -- ============================================================
 SELECT 'Suspending tasks...' AS status;
 
@@ -167,7 +167,11 @@ ALTER TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK SUSPEND;
 
 -- Suspend LOA_RAW_V001 Tasks (2 tasks)
 ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_EMAILS SUSPEND;
-ALTER TASK LOA_RAW_V001.LOAI_TASK_LOAD_DOCUMENTS SUSPEND;
+ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_DOCUMENTS SUSPEND;
+
+-- Suspend REP_RAW_001 Tasks (2 tasks - FINMA LCR)
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS SUSPEND;
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES SUSPEND;
 
 -- ============================================================
 -- COMPLETION MESSAGE

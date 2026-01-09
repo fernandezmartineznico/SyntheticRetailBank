@@ -58,7 +58,7 @@ USE SCHEMA REF_RAW_001;
 -- operations for manual file uploads and downloads.
 
 -- FX rates data stage
-CREATE OR REPLACE STAGE REFI_RAW_STAGE_FX_RATES
+CREATE STAGE IF NOT EXISTS REFI_RAW_STAGE_FX_RATES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

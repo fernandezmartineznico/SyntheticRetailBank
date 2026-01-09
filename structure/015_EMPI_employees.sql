@@ -57,7 +57,7 @@ USE SCHEMA CRM_RAW_001;
 -- for automated file detection via streams.
 
 -- Employee master data stage
-CREATE OR REPLACE STAGE EMPI_RAW_STAGE_EMPLOYEES
+CREATE STAGE IF NOT EXISTS EMPI_RAW_STAGE_EMPLOYEES
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -65,7 +65,7 @@ CREATE OR REPLACE STAGE EMPI_RAW_STAGE_EMPLOYEES
     COMMENT = 'Internal stage for employee master data CSV files. Expected pattern: *employees*.csv';
 
 -- Client-advisor assignment stage
-CREATE OR REPLACE STAGE EMPI_RAW_STAGE_CLIENT_ASSIGNMENTS
+CREATE STAGE IF NOT EXISTS EMPI_RAW_STAGE_CLIENT_ASSIGNMENTS
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE

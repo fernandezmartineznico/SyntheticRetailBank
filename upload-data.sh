@@ -968,6 +968,39 @@ upload_single_files \
     "*.pdf"
 
 # =============================================================================
+# UPLOAD LCR DATA (FINMA Liquidity Coverage Ratio)
+# =============================================================================
+echo "=== LCR DATA (FINMA LIQUIDITY COVERAGE RATIO) ==="
+echo ""
+
+# HQLA Holdings (High-Quality Liquid Assets)
+upload_single_files \
+    "$GENERATED_DATA_DIR/lcr" \
+    "LIQI_RAW_STAGE_HQLA_HOLDINGS" \
+    "REP_RAW_001" \
+    "LCR HQLA Holdings" \
+    "hqla_holdings_*.csv"
+
+# Deposit Balances (for net cash outflow calculation)
+upload_single_files \
+    "$GENERATED_DATA_DIR/lcr" \
+    "LIQI_RAW_STAGE_DEPOSIT_BALANCES" \
+    "REP_RAW_001" \
+    "LCR Deposit Balances" \
+    "deposit_balances_*.csv"
+
+# Refresh stream metadata for LCR files
+if [[ "$DRY_RUN" != "true" ]]; then
+    echo "  [INFO] Refreshing stream metadata for LCR data..."
+    snow sql -c "$CONNECTION_NAME" -q "
+        USE DATABASE AAA_DEV_SYNTHETIC_BANK;
+        USE SCHEMA REP_RAW_001;
+        SELECT SYSTEM\$STREAM_HAS_DATA('LIQI_RAW_STREAM_HQLA_FILES') AS hqla_stream_has_data,
+               SYSTEM\$STREAM_HAS_DATA('LIQI_RAW_STREAM_DEPOSIT_FILES') AS deposit_stream_has_data;
+    " > /dev/null 2>&1
+fi
+
+# =============================================================================
 # WAIT FOR PARALLEL UPLOADS TO COMPLETE
 # =============================================================================
 if [[ $PARALLEL_THREADS -gt 1 ]]; then

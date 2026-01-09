@@ -390,6 +390,10 @@ CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_360(
     IS_DORMANT_TRANSACTIONALLY BOOLEAN COMMENT 'TRUE if no transactions in 180+ days (fraud risk + churn risk)',
     IS_HIGHLY_ACTIVE BOOLEAN COMMENT 'TRUE if >50 transactions in last month (high engagement)',
     
+    -- Advisor Assignment (for relationship management and semantic views)
+    CURRENT_ADVISOR_EMPLOYEE_ID VARCHAR(50) COMMENT 'Employee ID of currently assigned advisor/relationship manager for customer portfolio management and performance tracking',
+    ADVISOR_ASSIGNMENT_START_DATE DATE COMMENT 'Date when current advisor was assigned to customer for relationship tenure analysis and advisor churn measurement',
+    
     EXPOSED_PERSON_EXACT_MATCH_ID VARCHAR(50) COMMENT 'PEP ID for exact name match (compliance)',
     EXPOSED_PERSON_EXACT_MATCH_NAME VARCHAR(200) COMMENT 'PEP name for exact match (compliance)',
     EXPOSED_PERSON_EXACT_CATEGORY VARCHAR(50) COMMENT 'PEP category for exact match (DOMESTIC/FOREIGN/etc.)',
@@ -511,6 +515,10 @@ SELECT
         THEN TRUE 
         ELSE FALSE 
     END AS IS_HIGHLY_ACTIVE,
+    
+    -- Advisor Assignment
+    adv_assign.ADVISOR_EMPLOYEE_ID AS CURRENT_ADVISOR_EMPLOYEE_ID,
+    adv_assign.ASSIGNMENT_START_DATE AS ADVISOR_ASSIGNMENT_START_DATE,
     
     -- PEP Compliance Fuzzy Matching
     -- Exact name match
@@ -706,7 +714,7 @@ LEFT JOIN (
     AND status.rn = 1
 
 -- Join accounts (aggregation layer) - for account type counts and metadata
-LEFT JOIN CRM_AGG_001.ACCA_AGG_DT_ACCOUNTS acc
+LEFT JOIN ACCA_AGG_DT_ACCOUNTS acc
     ON c.CUSTOMER_ID = acc.CUSTOMER_ID
 
 -- Join account balances (Phase 1 Enhancement) - for balance metrics
@@ -717,6 +725,11 @@ LEFT JOIN PAY_AGG_001.PAYA_AGG_DT_ACCOUNT_BALANCES bal
 -- Note: PAYI_RAW_TB_TRANSACTIONS has ACCOUNT_ID, not CUSTOMER_ID, so we join through accounts
 LEFT JOIN PAY_RAW_001.PAYI_RAW_TB_TRANSACTIONS txn
     ON acc.ACCOUNT_ID = txn.ACCOUNT_ID
+
+-- Join current advisor assignment (for relationship management)
+LEFT JOIN CRM_RAW_001.EMPI_RAW_TB_CLIENT_ASSIGNMENT adv_assign
+    ON c.CUSTOMER_ID = adv_assign.CUSTOMER_ID
+    AND adv_assign.IS_CURRENT = TRUE
 
 -- Exact Exposed Person name matching
 LEFT JOIN CRM_RAW_001.CRMI_RAW_TB_EXPOSED_PERSON pep_exact
@@ -758,6 +771,7 @@ GROUP BY
     c.EMPLOYER, c.POSITION, c.EMPLOYMENT_TYPE, c.INCOME_RANGE, c.ACCOUNT_TIER, c.EMAIL, c.PHONE, c.PREFERRED_CONTACT_METHOD, c.RISK_CLASSIFICATION, c.CREDIT_SCORE_BAND,
     addr.STREET_ADDRESS, addr.CITY, addr.STATE, addr.ZIPCODE, addr.COUNTRY, addr.CURRENT_FROM,
     status.STATUS, status.STATUS_START_DATE,
+    adv_assign.ADVISOR_EMPLOYEE_ID, adv_assign.ASSIGNMENT_START_DATE,
     pep_exact.EXPOSED_PERSON_ID, pep_exact.FULL_NAME, pep_exact.EXPOSED_PERSON_CATEGORY, pep_exact.RISK_LEVEL, pep_exact.STATUS,
     pep_fuzzy.EXPOSED_PERSON_ID, pep_fuzzy.FULL_NAME, pep_fuzzy.FIRST_NAME, pep_fuzzy.LAST_NAME, pep_fuzzy.EXPOSED_PERSON_CATEGORY, pep_fuzzy.RISK_LEVEL, pep_fuzzy.STATUS,
     sanctions_exact.ENTITY_ID, sanctions_exact.ENTITY_NAME, sanctions_exact.ENTITY_TYPE, sanctions_exact.COUNTRY,
