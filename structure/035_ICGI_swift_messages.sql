@@ -34,8 +34,12 @@
 -- ├─ STREAMS (1):
 -- │  └─ ICGI_RAW_STREAM_SWIFT_FILES    - File arrival detection for automation
 -- │
--- └─ TASKS (1):
---    └─ ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES - Automated XML ingestion (60-minute schedule)
+-- ├─ STORED PROCEDURES (1):
+-- │  └─ PAYI_CLEANUP_STAGE_KEEP_LAST_N  - Generic stage cleanup utility (shared from 030_PAYI)
+-- │
+-- └─ TASKS (2 - All Serverless: 1 load + 1 cleanup):
+--    ├─ ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES - Automated XML ingestion (60-minute schedule)
+--    └─ ICGI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_SWIFT_MESSAGES - Stage cleanup
 --
 -- DATA ARCHITECTURE:
 -- Raw XML files → ICGI_RAW_STAGE_SWIFT_INBOUND → Stream Detection → Automated Task → Raw Table → Downstream Processing
@@ -149,7 +153,28 @@ AS
 -- Tasks must be explicitly resumed to begin processing. This allows for
 -- controlled deployment and testing before enabling automated data flows.
 
--- Enable SWIFT XML message data loading
+-- ============================================================
+-- AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage. Uses PAYI_CLEANUP_STAGE_KEEP_LAST_N procedure
+-- defined in 030_PAYI_transactions.sql (same schema).
+
+-- Cleanup task for SWIFT messages stage
+CREATE OR REPLACE TASK ICGI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_SWIFT_MESSAGES
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after SWIFT message data load. Keeps last 5 files to manage storage costs.'
+    AFTER ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES
+AS
+    CALL PAYI_CLEANUP_STAGE_KEEP_LAST_N('ICGI_RAW_STAGE_SWIFT_INBOUND', 5);
+
+-- ============================================================
+-- TASK ACTIVATION
+-- ============================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume child task before parent task
+ALTER TASK ICGI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_SWIFT_MESSAGES RESUME;
 ALTER TASK ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES RESUME;
 
 -- ============================================================

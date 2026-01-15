@@ -49,12 +49,18 @@
 -- │  ├─ CRMI_RAW_STREAM_CUSTOMER_EVENT_FILES  - Detects new event files
 -- │  └─ CRMI_RAW_STREAM_CUSTOMER_STATUS_FILES - Detects new status files
 -- │
--- └─ TASKS (5 - All Serverless):
+-- ┌─ STORED PROCEDURES (1):
+-- │  └─ CRMI_CLEANUP_STAGE_KEEP_LAST_N        - Generic stage cleanup utility
+-- │
+-- └─ TASKS (8 - All Serverless: 5 load + 3 cleanup):
 --    ├─ CRMI_RAW_TASK_LOAD_CUSTOMERS        - Automated customer loading
 --    ├─ CRMI_RAW_TASK_LOAD_ADDRESSES        - Automated address loading
 --    ├─ CRMI_RAW_TASK_LOAD_EXPOSED_PERSON   - Automated PEP loading
 --    ├─ CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS  - Automated event loading
---    └─ CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS  - Automated status loading
+--    ├─ CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS  - Automated status loading
+--    ├─ CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_CUSTOMERS        - Stage cleanup
+--    ├─ CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ADDRESSES        - Stage cleanup
+--    └─ CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EXPOSED_PERSON   - Stage cleanup
 --
 -- RELATED SCHEMAS:
 -- - CRM_AGG_001 - Customer aggregations and SCD Type 2 views
@@ -560,10 +566,11 @@ AS
 -- Customer status history loading task
 -- Serverless task: Automated loading of customer status history files from stage.
 -- Processes status changes every 5 minutes for near-real-time status tracking.
+-- Note: Runs after CUSTOMER_EVENTS task to create a single DAG (Snowflake requirement)
 -- ------------------------------------------------------------
 CREATE OR REPLACE TASK CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
-    SCHEDULE = '60 MINUTE'
+    AFTER CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS
     WHEN SYSTEM$STREAM_HAS_DATA('CRMI_RAW_STREAM_CUSTOMER_STATUS_FILES')
 AS
     COPY INTO CRMI_RAW_TB_CUSTOMER_STATUS (
@@ -593,25 +600,209 @@ AS
     ON_ERROR = CONTINUE;
 
 -- ============================================================
--- SECTION 6: TASK ACTIVATION
+-- SECTION 6: MAINTENANCE PROCEDURES
+-- ============================================================
+-- Utility stored procedures for schema maintenance and operations.
+
+-- ------------------------------------------------------------
+-- CRMI_CLEANUP_STAGE_KEEP_LAST_N - Generic Stage Cleanup Procedure
+-- ------------------------------------------------------------
+-- Removes oldest files from any stage in CRM_RAW_001 schema, keeping only
+-- the N most recently modified files. Useful for managing stage storage
+-- costs and implementing data retention policies.
+--
+-- Parameters:
+--   STAGE_NAME: Stage name without @ prefix (e.g., 'CRMI_RAW_STAGE_CUSTOMERS')
+--   KEEP_N: Number of most recent files to retain
+--
+-- Returns: Summary string with deletion statistics
+--
+-- Usage Examples:
+--   CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('CRMI_RAW_STAGE_CUSTOMERS', 5);
+--   CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('ACCI_RAW_STAGE_ACCOUNTS', 10);
+
+CREATE OR REPLACE PROCEDURE CRMI_CLEANUP_STAGE_KEEP_LAST_N (
+    STAGE_NAME STRING,   -- Stage name without @ prefix (e.g., 'CRMI_RAW_STAGE_CUSTOMERS')
+    KEEP_N     NUMBER    -- Number of most recent files to retain
+)
+RETURNS STRING
+LANGUAGE SQL
+COMMENT = 'Generic stage cleanup utility for CRM_RAW_001 schema. Removes oldest files from a stage, keeping only the N most recently modified files. Useful for managing stage storage costs and data retention policies.'
+EXECUTE AS CALLER
+AS
+$$
+DECLARE
+  V_DELETED NUMBER := 0;
+  V_FAILED  NUMBER := 0;
+  V_REL     STRING;
+  V_CMD     STRING;
+  V_QUERY   STRING;
+  
+  C1 CURSOR FOR
+    SELECT RELATIVE_PATH
+    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+    
+BEGIN
+  -- Query files to delete (all except KEEP_N most recent)
+  V_QUERY := 'SELECT RELATIVE_PATH FROM DIRECTORY(@' || STAGE_NAME || ') ' ||
+             'QUALIFY ROW_NUMBER() OVER (ORDER BY LAST_MODIFIED DESC) > ' || KEEP_N;
+  
+  EXECUTE IMMEDIATE V_QUERY;
+
+  -- Process files for deletion
+  OPEN C1;
+  FOR RECORD IN C1 DO
+    V_REL := RECORD.RELATIVE_PATH;
+    V_CMD := 'REMOVE @' || STAGE_NAME || '/' || V_REL;
+    
+    BEGIN
+      EXECUTE IMMEDIATE V_CMD;
+      V_DELETED := V_DELETED + 1;
+    EXCEPTION
+      WHEN OTHER THEN
+        V_FAILED := V_FAILED + 1;
+    END;
+  END FOR;
+  CLOSE C1;
+
+  RETURN 'Stage cleanup completed. Deleted: ' || V_DELETED || ' files, Failed: ' || V_FAILED || ' files, Kept: ' || KEEP_N || ' most recent files.';
+END;
+$$;
+
+-- ============================================================
+-- SECTION 7: TASK ACTIVATION
 -- ============================================================
 -- Tasks must be explicitly resumed to begin processing. This allows for
 -- controlled deployment and testing before enabling automated data flows.
 
--- Enable customer data loading
+-- ============================================================
+-- SECTION 8: AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage by keeping only the N most recent files.
+
+-- Cleanup task for customer master data stage
+CREATE OR REPLACE TASK CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_CUSTOMERS
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after customer data load. Keeps last 5 files to manage storage costs.'
+    AFTER CRMI_RAW_TASK_LOAD_CUSTOMERS
+AS
+    CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('CRMI_RAW_STAGE_CUSTOMERS', 5);
+
+-- Cleanup task for address data stage
+CREATE OR REPLACE TASK CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ADDRESSES
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after address data load. Keeps last 5 files to manage storage costs.'
+    AFTER CRMI_RAW_TASK_LOAD_ADDRESSES
+AS
+    CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('CRMI_RAW_STAGE_ADDRESSES', 5);
+
+-- Cleanup task for PEP compliance data stage
+CREATE OR REPLACE TASK CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EXPOSED_PERSON
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after PEP data load. Keeps last 5 files to manage storage costs.'
+    AFTER CRMI_RAW_TASK_LOAD_EXPOSED_PERSON
+AS
+    CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('CRMI_RAW_STAGE_EXPOSED_PERSON', 5);
+
+-- Note: No automated cleanup for CRMI_RAW_STAGE_CUSTOMER_EVENTS due to Snowflake task DAG limitations
+-- (multiple independent root tasks cannot have child tasks in the same DAG).
+-- To manually clean this stage, run:
+--   CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('CRMI_RAW_STAGE_CUSTOMER_EVENTS', 5);
+
+-- ============================================================
+-- SECTION 9: TASK ACTIVATION
+-- ============================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume root tasks and their children (children must be resumed before parents)
+-- DAG 1: LOAD_CUSTOMERS -> CLEANUP_CUSTOMERS
+ALTER TASK CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_CUSTOMERS RESUME;
 ALTER TASK CRMI_RAW_TASK_LOAD_CUSTOMERS RESUME;
 
--- Enable address data loading (SCD Type 2)
+-- DAG 2: LOAD_ADDRESSES -> CLEANUP_ADDRESSES
+ALTER TASK CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ADDRESSES RESUME;
 ALTER TASK CRMI_RAW_TASK_LOAD_ADDRESSES RESUME;
 
--- Enable PEP compliance data loading
+-- DAG 3: LOAD_EXPOSED_PERSON -> CLEANUP_EXPOSED_PERSON
+ALTER TASK CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EXPOSED_PERSON RESUME;
 ALTER TASK CRMI_RAW_TASK_LOAD_EXPOSED_PERSON RESUME;
 
--- Enable customer lifecycle event loading
+-- DAG 4: LOAD_CUSTOMER_EVENTS -> LOAD_CUSTOMER_STATUS
+ALTER TASK CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS RESUME;
 ALTER TASK CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS RESUME;
 
--- Enable customer status history loading
-ALTER TASK CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS RESUME;
+-- ============================================================
+-- SECTION 10: DATA SENSITIVITY TAGGING
+-- ============================================================
+-- Apply sensitivity tags for data protection and access control.
+-- These tags enable data masking policies, access controls, and compliance monitoring.
+
+-- Tag customer PII columns as RESTRICTED
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN FIRST_NAME 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+    
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN FAMILY_NAME 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN EMAIL 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN PHONE 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN DATE_OF_BIRTH 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN EMPLOYER 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN HAS_ANOMALY 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN RISK_CLASSIFICATION 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN CREDIT_SCORE_BAND 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+-- Tag full customer identity as TOP_SECRET (for masking policies)
+ALTER TABLE CRMI_RAW_TB_CUSTOMER MODIFY COLUMN CUSTOMER_ID 
+    SET TAG SENSITIVITY_LEVEL = 'top_secret';
+
+-- Tag customer address PII columns
+ALTER TABLE CRMI_RAW_TB_ADDRESSES MODIFY COLUMN CITY 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_ADDRESSES MODIFY COLUMN ZIPCODE 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+-- Tag full address as TOP_SECRET (for masking policies)
+ALTER TABLE CRMI_RAW_TB_ADDRESSES MODIFY COLUMN STREET_ADDRESS 
+    SET TAG SENSITIVITY_LEVEL = 'top_secret';
+
+-- Tag PEP data as highly sensitive
+ALTER TABLE CRMI_RAW_TB_EXPOSED_PERSON MODIFY COLUMN FULL_NAME 
+    SET TAG SENSITIVITY_LEVEL = 'top_secret';
+
+ALTER TABLE CRMI_RAW_TB_EXPOSED_PERSON MODIFY COLUMN FIRST_NAME 
+    SET TAG SENSITIVITY_LEVEL = 'top_secret';
+
+ALTER TABLE CRMI_RAW_TB_EXPOSED_PERSON MODIFY COLUMN LAST_NAME 
+    SET TAG SENSITIVITY_LEVEL = 'top_secret';
+
+ALTER TABLE CRMI_RAW_TB_EXPOSED_PERSON MODIFY COLUMN DATE_OF_BIRTH 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_EXPOSED_PERSON MODIFY COLUMN EXPOSED_PERSON_CATEGORY 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+ALTER TABLE CRMI_RAW_TB_EXPOSED_PERSON MODIFY COLUMN RISK_LEVEL 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
+
+-- Tag customer event notes as restricted
+ALTER TABLE CRMI_RAW_TB_CUSTOMER_EVENT MODIFY COLUMN NOTES 
+    SET TAG SENSITIVITY_LEVEL = 'restricted';
 
 -- ============================================================
 -- SCHEMA COMPLETION STATUS

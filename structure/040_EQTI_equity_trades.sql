@@ -31,8 +31,12 @@
 -- ├─ STREAMS (1):
 -- │  └─ EQTI_RAW_STREAM_TRADES_FILES - Detects new trade files
 -- │
--- └─ TASKS (1):
---    └─ EQTI_RAW_TASK_LOAD_TRADES - Automated trade loading
+-- ├─ STORED PROCEDURES (1):
+-- │  └─ EQTI_CLEANUP_STAGE_KEEP_LAST_N - Generic stage cleanup utility
+-- │
+-- └─ TASKS (2 - All Serverless: 1 load + 1 cleanup):
+--    ├─ EQTI_RAW_TASK_LOAD_TRADES - Automated trade loading
+--    └─ EQTI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES - Stage cleanup
 --
 -- DATA ARCHITECTURE:
 -- File Upload → Stage → Stream Detection → Task Processing → Table
@@ -177,12 +181,99 @@ AS
     ON_ERROR = CONTINUE;
 
 -- ============================================================
+-- MAINTENANCE PROCEDURES
+-- ============================================================
+-- Utility stored procedures for schema maintenance and operations.
+
+-- ------------------------------------------------------------
+-- EQTI_CLEANUP_STAGE_KEEP_LAST_N - Generic Stage Cleanup Procedure
+-- ------------------------------------------------------------
+-- Removes oldest files from any stage in EQT_RAW_001 schema, keeping only
+-- the N most recently modified files. Useful for managing stage storage
+-- costs and implementing data retention policies.
+--
+-- Parameters:
+--   STAGE_NAME: Stage name without @ prefix (e.g., 'EQTI_RAW_STAGE_TRADES')
+--   KEEP_N: Number of most recent files to retain
+--
+-- Returns: Summary string with deletion statistics
+--
+-- Usage Example:
+--   CALL EQTI_CLEANUP_STAGE_KEEP_LAST_N('EQTI_RAW_STAGE_TRADES', 5);
+
+CREATE OR REPLACE PROCEDURE EQTI_CLEANUP_STAGE_KEEP_LAST_N (
+    STAGE_NAME STRING,
+    KEEP_N     NUMBER
+)
+RETURNS STRING
+LANGUAGE SQL
+COMMENT = 'Generic stage cleanup utility for EQT_RAW_001 schema. Removes oldest files from a stage, keeping only the N most recently modified files.'
+EXECUTE AS CALLER
+AS
+$$
+DECLARE
+  V_DELETED NUMBER := 0;
+  V_FAILED  NUMBER := 0;
+  V_REL     STRING;
+  V_CMD     STRING;
+  V_QUERY   STRING;
+  
+  C1 CURSOR FOR
+    SELECT RELATIVE_PATH
+    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+    
+BEGIN
+  V_QUERY := 'SELECT RELATIVE_PATH FROM DIRECTORY(@' || STAGE_NAME || ') ' ||
+             'QUALIFY ROW_NUMBER() OVER (ORDER BY LAST_MODIFIED DESC) > ' || KEEP_N;
+  
+  EXECUTE IMMEDIATE V_QUERY;
+
+  OPEN C1;
+  FOR RECORD IN C1 DO
+    V_REL := RECORD.RELATIVE_PATH;
+    V_CMD := 'REMOVE @' || STAGE_NAME || '/' || V_REL;
+    
+    BEGIN
+      EXECUTE IMMEDIATE V_CMD;
+      V_DELETED := V_DELETED + 1;
+    EXCEPTION
+      WHEN OTHER THEN
+        V_FAILED := V_FAILED + 1;
+    END;
+  END FOR;
+  CLOSE C1;
+
+  RETURN 'Stage cleanup completed. Deleted: ' || V_DELETED || ' files, Failed: ' || V_FAILED || ' files, Kept: ' || KEEP_N || ' most recent files.';
+END;
+$$;
+
+-- ============================================================
 -- TASK ACTIVATION - Enable Automated Processing
 -- ============================================================
 -- Tasks must be explicitly resumed to begin processing. This allows for
 -- controlled deployment and testing before enabling automated data flows.
 
--- Enable equity trade data loading
+-- ============================================================
+-- AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage by keeping only the N most recent files.
+
+-- Cleanup task for equity trades stage
+CREATE OR REPLACE TASK EQTI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after equity trade data load. Keeps last 5 files to manage storage costs.'
+    AFTER EQTI_RAW_TASK_LOAD_TRADES
+AS
+    CALL EQTI_CLEANUP_STAGE_KEEP_LAST_N('EQTI_RAW_STAGE_TRADES', 5);
+
+-- ============================================================
+-- TASK ACTIVATION
+-- ============================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume child task before parent task
+ALTER TASK EQTI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES RESUME;
 ALTER TASK EQTI_RAW_TASK_LOAD_TRADES RESUME;
 
 -- ============================================================

@@ -41,16 +41,21 @@
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
 
 -- ============================================================
--- STEP 1: EXECUTE ALL RAW LAYER TASKS (18 tasks)
+-- STEP 1: EXECUTE ALL RAW LAYER TASKS (17 root tasks)
 -- ============================================================
 -- These tasks load data from Snowflake stages into RAW tables
 -- Execute in logical order: Master data → Reference data → Transactional data
+-- 
+-- NOTE: After each load task completes, its associated cleanup task will
+-- automatically execute to remove old files from the stage (keeping last 5 files).
+-- 15 cleanup tasks + 1 customer status task = 16 child tasks run automatically.
 -- ============================================================
 
 SELECT 'STEP 1: Executing RAW layer tasks to load data from stages...' AS status;
+SELECT 'Note: 16 child tasks will run automatically (15 cleanup + 1 customer status)' AS info;
 
 -- ============================================================
--- Execute CRM_RAW_001 Tasks (7 tasks)
+-- Execute CRM_RAW_001 Tasks (6 root tasks, 1 child auto-triggered)
 -- ============================================================
 SELECT 'Executing CRM master data tasks...' AS status;
 
@@ -67,12 +72,9 @@ EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_EXPOSED_PERSON;
 SELECT 'Executed: CRMI_RAW_TASK_LOAD_EXPOSED_PERSON' AS status;
 
 -- Load customer events (depends on customers)
+-- Note: This will automatically trigger CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS via AFTER clause
 EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS;
-SELECT 'Executed: CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS' AS status;
-
--- Load customer status (depends on customers)
-EXECUTE TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS;
-SELECT 'Executed: CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS' AS status;
+SELECT 'Executed: CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS (will auto-trigger CUSTOMER_STATUS)' AS status;
 
 -- Load employees (master data - independent)
 EXECUTE TASK CRM_RAW_001.EMPI_RAW_TASK_LOAD_EMPLOYEES;
@@ -141,16 +143,16 @@ EXECUTE TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK;
 SELECT 'Executed: CMDI_LOAD_TRADES_TASK' AS status;
 
 -- ============================================================
--- Execute LOA_RAW_V001 Tasks (2 tasks)
+-- Execute LOA_RAW_001 Tasks (2 tasks)
 -- ============================================================
 SELECT 'Executing loan document tasks...' AS status;
 
 -- Load loan emails
-EXECUTE TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_EMAILS;
+EXECUTE TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_EMAILS;
 SELECT 'Executed: LOAI_RAW_TASK_LOAD_EMAILS' AS status;
 
 -- Load loan PDF documents
-EXECUTE TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_DOCUMENTS;
+EXECUTE TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_DOCUMENTS;
 SELECT 'Executed: LOAI_RAW_TASK_LOAD_DOCUMENTS' AS status;
 
 -- ============================================================
@@ -166,7 +168,7 @@ SELECT 'Executed: LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS' AS status;
 EXECUTE TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES;
 SELECT 'Executed: LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES' AS status;
 
-SELECT 'STEP 1 COMPLETE: All 18 RAW layer tasks executed' AS status;
+SELECT 'STEP 1 COMPLETE: All 17 root RAW layer tasks executed (+ 16 child tasks auto-triggered)' AS status;
 
 -- ============================================================
 -- STEP 2: REFRESH AGGREGATION LAYER DYNAMIC TABLES (30 tables)
@@ -454,8 +456,9 @@ SELECT 'STEP 3 COMPLETE: All 31 REPORTING layer dynamic tables refreshed' AS sta
 SELECT
     'EXECUTION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 18 tasks executed and 61 dynamic tables refreshed (30 AGG + 31 REP).' AS summary,
-    'Total: 79 operations completed' AS details,
+    'All 17 root load tasks executed and 61 dynamic tables refreshed (30 AGG + 31 REP).' AS summary,
+    'Total: 78 manual operations completed' AS details,
+    'Note: 16 child tasks auto-triggered (15 cleanup + 1 customer status)' AS auto_tasks_info,
     'Verify data loaded correctly by querying key tables' AS next_step;
 
 -- ============================================================

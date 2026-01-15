@@ -955,7 +955,7 @@ echo ""
 upload_single_files \
     "$GENERATED_DATA_DIR/emails" \
     "LOAI_RAW_STAGE_EMAIL_INBOUND" \
-    "LOA_RAW_v001" \
+    "LOA_RAW_001" \
     "Loan Email Documents" \
     "*.txt"
 
@@ -963,7 +963,7 @@ upload_single_files \
 upload_single_files \
     "$GENERATED_DATA_DIR/creditcard_pdf" \
     "LOAI_RAW_STAGE_PDF_INBOUND" \
-    "LOA_RAW_v001" \
+    "LOA_RAW_001" \
     "Loan PDF Documents" \
     "*.pdf"
 

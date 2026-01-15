@@ -30,8 +30,12 @@
 -- ├─ STREAMS (1):
 -- │  └─ REFI_RAW_STREAM_FX_RATE_FILES - Detects new FX rate files
 -- │
--- └─ TASKS (1):
---    └─ REFI_RAW_TASK_LOAD_FX_RATES - Automated FX rate loading
+-- ├─ STORED PROCEDURES (1):
+-- │  └─ REFI_CLEANUP_STAGE_KEEP_LAST_N - Generic stage cleanup utility
+-- │
+-- └─ TASKS (2 - All Serverless: 1 load + 1 cleanup):
+--    ├─ REFI_RAW_TASK_LOAD_FX_RATES - Automated FX rate loading
+--    └─ REFI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_FX_RATES - Stage cleanup
 --
 -- DATA ARCHITECTURE:
 -- File Upload → Stage → Stream Detection → Task Processing → Table
@@ -148,12 +152,99 @@ AS
     ON_ERROR = CONTINUE;
 
 -- ============================================================
+-- MAINTENANCE PROCEDURES
+-- ============================================================
+-- Utility stored procedures for schema maintenance and operations.
+
+-- ------------------------------------------------------------
+-- REFI_CLEANUP_STAGE_KEEP_LAST_N - Generic Stage Cleanup Procedure
+-- ------------------------------------------------------------
+-- Removes oldest files from any stage in REF_RAW_001 schema, keeping only
+-- the N most recently modified files. Useful for managing stage storage
+-- costs and implementing data retention policies.
+--
+-- Parameters:
+--   STAGE_NAME: Stage name without @ prefix (e.g., 'REFI_RAW_STAGE_FX_RATES')
+--   KEEP_N: Number of most recent files to retain
+--
+-- Returns: Summary string with deletion statistics
+--
+-- Usage Example:
+--   CALL REFI_CLEANUP_STAGE_KEEP_LAST_N('REFI_RAW_STAGE_FX_RATES', 5);
+
+CREATE OR REPLACE PROCEDURE REFI_CLEANUP_STAGE_KEEP_LAST_N (
+    STAGE_NAME STRING,
+    KEEP_N     NUMBER
+)
+RETURNS STRING
+LANGUAGE SQL
+COMMENT = 'Generic stage cleanup utility for REF_RAW_001 schema. Removes oldest files from a stage, keeping only the N most recently modified files.'
+EXECUTE AS CALLER
+AS
+$$
+DECLARE
+  V_DELETED NUMBER := 0;
+  V_FAILED  NUMBER := 0;
+  V_REL     STRING;
+  V_CMD     STRING;
+  V_QUERY   STRING;
+  
+  C1 CURSOR FOR
+    SELECT RELATIVE_PATH
+    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+    
+BEGIN
+  V_QUERY := 'SELECT RELATIVE_PATH FROM DIRECTORY(@' || STAGE_NAME || ') ' ||
+             'QUALIFY ROW_NUMBER() OVER (ORDER BY LAST_MODIFIED DESC) > ' || KEEP_N;
+  
+  EXECUTE IMMEDIATE V_QUERY;
+
+  OPEN C1;
+  FOR RECORD IN C1 DO
+    V_REL := RECORD.RELATIVE_PATH;
+    V_CMD := 'REMOVE @' || STAGE_NAME || '/' || V_REL;
+    
+    BEGIN
+      EXECUTE IMMEDIATE V_CMD;
+      V_DELETED := V_DELETED + 1;
+    EXCEPTION
+      WHEN OTHER THEN
+        V_FAILED := V_FAILED + 1;
+    END;
+  END FOR;
+  CLOSE C1;
+
+  RETURN 'Stage cleanup completed. Deleted: ' || V_DELETED || ' files, Failed: ' || V_FAILED || ' files, Kept: ' || KEEP_N || ' most recent files.';
+END;
+$$;
+
+-- ============================================================
 -- TASK ACTIVATION - Enable Automated Processing
 -- ============================================================
 -- Tasks must be explicitly resumed to begin processing. This allows for
 -- controlled deployment and testing before enabling automated data flows.
 
--- Enable FX rates data loading
+-- ============================================================
+-- AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage by keeping only the N most recent files.
+
+-- Cleanup task for FX rates stage
+CREATE OR REPLACE TASK REFI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_FX_RATES
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after FX rates data load. Keeps last 5 files to manage storage costs.'
+    AFTER REFI_RAW_TASK_LOAD_FX_RATES
+AS
+    CALL REFI_CLEANUP_STAGE_KEEP_LAST_N('REFI_RAW_STAGE_FX_RATES', 5);
+
+-- ============================================================
+-- TASK ACTIVATION
+-- ============================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume child task before parent task
+ALTER TASK REFI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_FX_RATES RESUME;
 ALTER TASK REFI_RAW_TASK_LOAD_FX_RATES RESUME;
 
 -- ============================================================

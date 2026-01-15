@@ -38,9 +38,14 @@
 -- │  ├─ EMPI_RAW_STREAM_EMPLOYEE_FILES     - Detects new employee files
 -- │  └─ EMPI_RAW_STREAM_ASSIGNMENT_FILES   - Detects new assignment files
 -- │
--- └─ TASKS (2 - All Serverless):
+-- ┌─ STORED PROCEDURES (1):
+-- │  └─ CRMI_CLEANUP_STAGE_KEEP_LAST_N     - Generic stage cleanup utility (shared from 010_CRMI)
+-- │
+-- └─ TASKS (4 - All Serverless: 2 load + 2 cleanup):
 --    ├─ EMPI_RAW_TASK_LOAD_EMPLOYEES       - Automated employee loading
---    └─ EMPI_RAW_TASK_LOAD_ASSIGNMENTS     - Automated assignment loading
+--    ├─ EMPI_RAW_TASK_LOAD_ASSIGNMENTS     - Automated assignment loading
+--    ├─ EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMPLOYEES   - Stage cleanup
+--    └─ EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ASSIGNMENTS - Stage cleanup
 --
 -- RELATED SCHEMAS:
 -- - CRM_AGG_001 - Employee analytics views and hierarchy aggregations
@@ -202,9 +207,6 @@ AS
     MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
     ON_ERROR = 'CONTINUE';
 
--- Resume task to enable automatic execution
-ALTER TASK EMPI_RAW_TASK_LOAD_EMPLOYEES RESUME;
-
 -- Task: Load client-advisor assignments
 CREATE OR REPLACE TASK EMPI_RAW_TASK_LOAD_ASSIGNMENTS
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
@@ -218,7 +220,39 @@ AS
     MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
     ON_ERROR = 'CONTINUE';
 
--- Resume task to enable automatic execution
+-- ============================================================
+-- AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage. Uses CRMI_CLEANUP_STAGE_KEEP_LAST_N procedure
+-- defined in 010_CRMI_customer_master.sql (same schema).
+
+-- Cleanup task for employee data stage
+CREATE OR REPLACE TASK EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMPLOYEES
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after employee data load. Keeps last 5 files to manage storage costs.'
+    AFTER EMPI_RAW_TASK_LOAD_EMPLOYEES
+AS
+    CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('EMPI_RAW_STAGE_EMPLOYEES', 5);
+
+-- Cleanup task for client assignment data stage
+CREATE OR REPLACE TASK EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ASSIGNMENTS
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after client assignment data load. Keeps last 5 files to manage storage costs.'
+    AFTER EMPI_RAW_TASK_LOAD_ASSIGNMENTS
+AS
+    CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('EMPI_RAW_STAGE_CLIENT_ASSIGNMENTS', 5);
+
+-- ============================================================
+-- TASK ACTIVATION
+-- ============================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume child tasks before parent tasks
+ALTER TASK EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMPLOYEES RESUME;
+ALTER TASK EMPI_RAW_TASK_LOAD_EMPLOYEES RESUME;
+
+ALTER TASK EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ASSIGNMENTS RESUME;
 ALTER TASK EMPI_RAW_TASK_LOAD_ASSIGNMENTS RESUME;
 
 -- ============================================================

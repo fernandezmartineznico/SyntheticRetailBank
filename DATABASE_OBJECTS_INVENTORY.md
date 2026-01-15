@@ -282,12 +282,6 @@
 ### Tables (1)
 1. `SANCTIONS_TB_DATA_STAGING` - Sanctions reference data (from shared database)
 
-### Semantic Views (4)
-1. `CRMA_SEMANTIC_VIEW` - Customer 360 semantic view for Cortex AI
-2. `CRM_COMPLIANCE_RISK_VIEW` - Compliance risk semantic view
-3. `CRM_LIFECYCLE_VIEW` - Customer lifecycle semantic view
-4. `CRM_ADDRESS_INTELLIGENCE_VIEW` - Address intelligence semantic view
-
 ---
 
 ## Object Type Summary

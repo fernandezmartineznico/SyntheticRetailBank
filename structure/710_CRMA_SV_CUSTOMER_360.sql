@@ -1,11 +1,9 @@
 -- ============================================================================
 -- 710_CRMA_SV_CUSTOMER_360.sql
--- Comprehensive Customer 360° Semantic View (CONSOLIDATED from 4 views)
+-- Comprehensive Customer 360° Semantic View
 -- ============================================================================
 -- Purpose: Unified customer intelligence including profile, compliance, risk,
 --          lifecycle, and address data
--- Consolidates: 700, 701, 702, 703 (CRMA_SEMANTIC_VIEW, CRM_COMPLIANCE_RISK_VIEW,
---               CRM_LIFECYCLE_VIEW, CRM_ADDRESS_INTELLIGENCE_VIEW)
 -- Used by: All notebooks, Streamlit CRM App, AI Agents (MD_2, MD3)
 -- Business Value: Foundation for all CRM operations
 -- ============================================================================
@@ -187,30 +185,6 @@ metrics (
 --       in this semantic view. Use EMPA_SV_EMPLOYEE_ADVISOR for advisor-centric queries.
 
 -- ============================================================================
--- Backward Compatibility Aliases
--- ============================================================================
--- Allow old notebooks and apps to continue working during migration
--- Drop old semantic views first (if they exist)
-
--- Note: Using DROP VIEW for backward compatibility - these should be regular views now
-
-CREATE OR REPLACE VIEW CRMA_SEMANTIC_VIEW
-COMMENT = 'Backward compatibility alias for CRMA_SV_CUSTOMER_360'
-AS SELECT * FROM CRMA_AGG_DT_CUSTOMER_360;
-
-CREATE OR REPLACE VIEW CRM_COMPLIANCE_RISK_VIEW
-COMMENT = 'Backward compatibility alias for CRMA_SV_CUSTOMER_360 (compliance/risk subset)'
-AS SELECT * FROM CRMA_AGG_DT_CUSTOMER_360;
-
-CREATE OR REPLACE VIEW CRM_LIFECYCLE_VIEW
-COMMENT = 'Backward compatibility alias for CRMA_SV_CUSTOMER_360 (lifecycle subset)'
-AS SELECT * FROM CRMA_AGG_DT_CUSTOMER_360;
-
-CREATE OR REPLACE VIEW CRM_ADDRESS_INTELLIGENCE_VIEW
-COMMENT = 'Backward compatibility alias for CRMA_SV_CUSTOMER_360 (address subset)'
-AS SELECT * FROM CRMA_AGG_DT_CUSTOMER_360;
-
--- ============================================================================
 -- Permissions
 -- ============================================================================
 
@@ -218,11 +192,6 @@ AS SELECT * FROM CRMA_AGG_DT_CUSTOMER_360;
 -- Access is controlled through the underlying table permissions
 GRANT SELECT ON TABLE CRMA_AGG_DT_CUSTOMER_360 TO ROLE ACCOUNTADMIN;
 GRANT SELECT ON TABLE CRMA_AGG_DT_CUSTOMER_360 TO ROLE PUBLIC;
-
-GRANT SELECT ON VIEW CRMA_SEMANTIC_VIEW TO ROLE PUBLIC;
-GRANT SELECT ON VIEW CRM_COMPLIANCE_RISK_VIEW TO ROLE PUBLIC;
-GRANT SELECT ON VIEW CRM_LIFECYCLE_VIEW TO ROLE PUBLIC;
-GRANT SELECT ON VIEW CRM_ADDRESS_INTELLIGENCE_VIEW TO ROLE PUBLIC;
 
 -- ============================================================================
 -- Validation Queries

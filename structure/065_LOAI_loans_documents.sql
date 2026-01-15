@@ -1,5 +1,5 @@
 -- ============================================================
--- LOA_RAW_v001 Schema - Loan & Document Processing (Raw Data Layer)
+-- LOA_RAW_001 Schema - Loan & Document Processing (Raw Data Layer)
 -- Generated on: 2025-10-04
 -- ============================================================
 --
@@ -34,9 +34,14 @@
 -- │  ├─ LOAI_RAW_STREAM_EMAIL_FILES    - Email file arrival detection
 -- │  └─ LOAI_RAW_STREAM_PDF_FILES      - PDF file arrival detection
 -- │
--- └─ TASKS (2):
+-- ├─ STORED PROCEDURES (1):
+-- │  └─ LOAI_CLEANUP_STAGE_KEEP_LAST_N  - Generic stage cleanup utility
+-- │
+-- └─ TASKS (4 - All Serverless: 2 load + 2 cleanup):
 --    ├─ LOAI_RAW_TASK_LOAD_EMAILS      - Automated email ingestion
---    └─ LOAI_RAW_TASK_LOAD_DOCUMENTS   - Automated PDF ingestion
+--    ├─ LOAI_RAW_TASK_LOAD_DOCUMENTS   - Automated PDF ingestion
+--    ├─ LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS     - Stage cleanup
+--    └─ LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS  - Stage cleanup
 --
 -- DATA ARCHITECTURE:
 -- Email files → LOAI_RAW_STAGE_EMAIL_INBOUND → Stream Detection → Automated Task → Raw Table → DocAI Processing
@@ -57,7 +62,7 @@
 -- ============================================================
 
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
-USE SCHEMA LOA_RAW_v001;
+USE SCHEMA LOA_RAW_001;
 
 -- ============================================================
 -- INTERNAL STAGES - Document Landing Areas
@@ -67,6 +72,7 @@ USE SCHEMA LOA_RAW_v001;
 
 -- Stage for inbound email files (DocAI processing)
 CREATE STAGE IF NOT EXISTS LOAI_RAW_STAGE_EMAIL_INBOUND
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -75,6 +81,7 @@ CREATE STAGE IF NOT EXISTS LOAI_RAW_STAGE_EMAIL_INBOUND
 
 -- Stage for inbound PDF documents (DocAI processing)
 CREATE STAGE IF NOT EXISTS LOAI_RAW_STAGE_PDF_INBOUND
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
@@ -173,14 +180,112 @@ AS
     PATTERN = '.*\.pdf'                              -- Process PDF documents
     ON_ERROR = CONTINUE;                             -- Continue processing on individual file errors for resilience
 
--- Activate the tasks for production operations
+-- ============================================================
+-- MAINTENANCE PROCEDURES
+-- ============================================================
+-- Utility stored procedures for schema maintenance and operations.
+
+-- ------------------------------------------------------------
+-- LOAI_CLEANUP_STAGE_KEEP_LAST_N - Generic Stage Cleanup Procedure
+-- ------------------------------------------------------------
+-- Removes oldest files from any stage in LOA_RAW_001 schema, keeping only
+-- the N most recently modified files. Useful for managing stage storage
+-- costs and implementing data retention policies.
+--
+-- Parameters:
+--   STAGE_NAME: Stage name without @ prefix (e.g., 'LOAI_RAW_STAGE_EMAIL_INBOUND')
+--   KEEP_N: Number of most recent files to retain
+--
+-- Returns: Summary string with deletion statistics
+--
+-- Usage Examples:
+--   CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_EMAIL_INBOUND', 5);
+--   CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_PDF_INBOUND', 5);
+
+CREATE OR REPLACE PROCEDURE LOAI_CLEANUP_STAGE_KEEP_LAST_N (
+    STAGE_NAME STRING,
+    KEEP_N     NUMBER
+)
+RETURNS STRING
+LANGUAGE SQL
+COMMENT = 'Generic stage cleanup utility for LOA_RAW_001 schema. Removes oldest files from a stage, keeping only the N most recently modified files.'
+EXECUTE AS CALLER
+AS
+$$
+DECLARE
+  V_DELETED NUMBER := 0;
+  V_FAILED  NUMBER := 0;
+  V_REL     STRING;
+  V_CMD     STRING;
+  V_QUERY   STRING;
+  
+  C1 CURSOR FOR
+    SELECT RELATIVE_PATH
+    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+    
+BEGIN
+  V_QUERY := 'SELECT RELATIVE_PATH FROM DIRECTORY(@' || STAGE_NAME || ') ' ||
+             'QUALIFY ROW_NUMBER() OVER (ORDER BY LAST_MODIFIED DESC) > ' || KEEP_N;
+  
+  EXECUTE IMMEDIATE V_QUERY;
+
+  OPEN C1;
+  FOR RECORD IN C1 DO
+    V_REL := RECORD.RELATIVE_PATH;
+    V_CMD := 'REMOVE @' || STAGE_NAME || '/' || V_REL;
+    
+    BEGIN
+      EXECUTE IMMEDIATE V_CMD;
+      V_DELETED := V_DELETED + 1;
+    EXCEPTION
+      WHEN OTHER THEN
+        V_FAILED := V_FAILED + 1;
+    END;
+  END FOR;
+  CLOSE C1;
+
+  RETURN 'Stage cleanup completed. Deleted: ' || V_DELETED || ' files, Failed: ' || V_FAILED || ' files, Kept: ' || KEEP_N || ' most recent files.';
+END;
+$$;
+
+-- ============================================================
+-- AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage by keeping only the N most recent files.
+
+-- Cleanup task for email inbound stage
+CREATE OR REPLACE TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after email data load. Keeps last 5 files to manage storage costs.'
+    AFTER LOAI_RAW_TASK_LOAD_EMAILS
+AS
+    CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_EMAIL_INBOUND', 5);
+
+-- Cleanup task for PDF documents stage
+CREATE OR REPLACE TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after PDF document data load. Keeps last 5 files to manage storage costs.'
+    AFTER LOAI_RAW_TASK_LOAD_DOCUMENTS
+AS
+    CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_PDF_INBOUND', 5);
+
+-- ============================================================
+-- TASK ACTIVATION
+-- ============================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume child tasks before parent tasks
+ALTER TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS RESUME;
 ALTER TASK LOAI_RAW_TASK_LOAD_EMAILS RESUME;
+
+ALTER TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS RESUME;
 ALTER TASK LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
 
 -- ============================================================
 -- SCHEMA COMPLETION STATUS
 -- ============================================================
--- ✅ LOA_RAW_v001 Schema Deployment Complete
+-- ✅ LOA_RAW_001 Schema Deployment Complete
 --
 -- OBJECTS CREATED:
 -- • 2 Stages: LOAI_RAW_STAGE_EMAIL_INBOUND (emails), LOAI_RAW_STAGE_PDF_INBOUND (PDFs)
@@ -189,10 +294,10 @@ ALTER TASK LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
 -- • 2 Tasks: LOAI_RAW_TASK_LOAD_EMAILS, LOAI_RAW_TASK_LOAD_DOCUMENTS (automated ingestion - ACTIVE)
 --
 -- NEXT STEPS:
--- 1. ✅ LOA_RAW_v001 schema deployed successfully
+-- 1. ✅ LOA_RAW_001 schema deployed successfully
 -- 2. Upload email files to stage: PUT file://*.eml @LOAI_RAW_STAGE_EMAIL_INBOUND;
 -- 3. Upload PDF documents to stage: PUT file://*.pdf @LOAI_RAW_STAGE_PDF_INBOUND;
--- 4. Monitor task execution: SHOW TASKS IN SCHEMA LOA_RAW_v001;
+-- 4. Monitor task execution: SHOW TASKS IN SCHEMA LOA_RAW_001;
 -- 5. Verify document loading: SELECT COUNT(*) FROM LOAI_RAW_TB_EMAILS; SELECT COUNT(*) FROM LOAI_RAW_TB_DOCUMENTS;
 -- 6. Deploy LOA_AGG_v001 schema for loan analytics and business logic
 --
@@ -217,7 +322,7 @@ ALTER TASK LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
 --
 -- MONITORING:
 -- - Task status: SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) WHERE NAME IN ('LOAI_RAW_TASK_LOAD_EMAILS', 'LOAI_RAW_TASK_LOAD_DOCUMENTS');
--- - Stream status: SHOW STREAMS IN SCHEMA LOA_RAW_v001;
+-- - Stream status: SHOW STREAMS IN SCHEMA LOA_RAW_001;
 -- - Stage contents: LIST @LOAI_RAW_STAGE_EMAIL_INBOUND; LIST @LOAI_RAW_STAGE_PDF_INBOUND;
 -- - DocAI processing status: Monitor file counts and processing workflows for email and PDF stages
 --

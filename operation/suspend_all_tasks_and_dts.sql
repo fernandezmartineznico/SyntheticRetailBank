@@ -133,11 +133,14 @@ ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELIVERY_SCHEDULE SUSPEND;
 
 
 -- ============================================================
--- SUSPEND ALL TASKS (18 total across all schemas)
+-- SUSPEND ALL TASKS (33 total: 18 load tasks + 15 cleanup tasks)
 -- ============================================================
 SELECT 'Suspending tasks...' AS status;
 
--- Suspend CRM_RAW_001 Tasks (7 tasks)
+-- ============================================================
+-- Suspend CRM_RAW_001 Tasks (13 tasks: 7 load + 6 cleanup)
+-- ============================================================
+-- Suspend load tasks first (parents)
 ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMERS SUSPEND;
 ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_ADDRESSES SUSPEND;
 ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_EXPOSED_PERSON SUSPEND;
@@ -146,32 +149,64 @@ ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS SUSPEND;
 ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_LOAD_EMPLOYEES SUSPEND;
 ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_LOAD_ASSIGNMENTS SUSPEND;
 
-       -- Suspend ACC_RAW_001 Tasks (1 task) - Task is in CRM_RAW_001 schema
-       ALTER TASK CRM_RAW_001.ACCI_RAW_TASK_LOAD_ACCOUNTS SUSPEND;
+-- Suspend ACC_RAW_001 load task (Task is in CRM_RAW_001 schema)
+ALTER TASK CRM_RAW_001.ACCI_RAW_TASK_LOAD_ACCOUNTS SUSPEND;
 
--- Suspend REF_RAW_001 Tasks (1 task)
+-- Suspend cleanup tasks (children)
+ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_CUSTOMERS SUSPEND;
+ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ADDRESSES SUSPEND;
+ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EXPOSED_PERSON SUSPEND;
+ALTER TASK CRM_RAW_001.ACCI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ACCOUNTS SUSPEND;
+ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMPLOYEES SUSPEND;
+ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ASSIGNMENTS SUSPEND;
+
+-- ============================================================
+-- Suspend REF_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
 ALTER TASK REF_RAW_001.REFI_RAW_TASK_LOAD_FX_RATES SUSPEND;
+ALTER TASK REF_RAW_001.REFI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_FX_RATES SUSPEND;
 
--- Suspend PAY_RAW_001 Tasks (2 tasks)
+-- ============================================================
+-- Suspend PAY_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup)
+-- ============================================================
 ALTER TASK PAY_RAW_001.PAYI_RAW_TASK_LOAD_TRANSACTIONS SUSPEND;
 ALTER TASK PAY_RAW_001.ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES SUSPEND;
+ALTER TASK PAY_RAW_001.PAYI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRANSACTIONS SUSPEND;
+ALTER TASK PAY_RAW_001.ICGI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_SWIFT_MESSAGES SUSPEND;
 
--- Suspend EQT_RAW_001 Tasks (1 task)
+-- ============================================================
+-- Suspend EQT_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
 ALTER TASK EQT_RAW_001.EQTI_RAW_TASK_LOAD_TRADES SUSPEND;
+ALTER TASK EQT_RAW_001.EQTI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES SUSPEND;
 
--- Suspend FII_RAW_001 Tasks (1 task)
+-- ============================================================
+-- Suspend FII_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
 ALTER TASK FII_RAW_001.FIII_LOAD_TRADES_TASK SUSPEND;
+ALTER TASK FII_RAW_001.FIII_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES SUSPEND;
 
--- Suspend CMD_RAW_001 Tasks (1 task)
+-- ============================================================
+-- Suspend CMD_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
 ALTER TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK SUSPEND;
+ALTER TASK CMD_RAW_001.CMDI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES SUSPEND;
 
--- Suspend LOA_RAW_V001 Tasks (2 tasks)
-ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_EMAILS SUSPEND;
-ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_DOCUMENTS SUSPEND;
+-- ============================================================
+-- Suspend LOA_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup)
+-- ============================================================
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_EMAILS SUSPEND;
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_DOCUMENTS SUSPEND;
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS SUSPEND;
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS SUSPEND;
 
--- Suspend REP_RAW_001 Tasks (2 tasks - FINMA LCR)
+-- ============================================================
+-- Suspend REP_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup - FINMA LCR)
+-- ============================================================
 ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS SUSPEND;
 ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES SUSPEND;
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_HQLA_HOLDINGS SUSPEND;
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DEPOSIT_BALANCES SUSPEND;
 
 -- ============================================================
 -- COMPLETION MESSAGE
@@ -179,5 +214,5 @@ ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES SUSPEND;
 SELECT
     'DYNAMIC_SUSPENSION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 59 dynamic tables and 16 tasks have been suspended.' AS message,
+    'All 59 dynamic tables and 33 tasks have been suspended (18 load tasks + 15 cleanup tasks).' AS message,
     'System is now in maintenance mode.' AS next_step;

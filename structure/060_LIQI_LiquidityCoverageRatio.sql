@@ -30,9 +30,14 @@
 -- │  ├─ LIQI_RAW_STREAM_HQLA_FILES        - Change data capture for HQLA files
 -- │  └─ LIQI_RAW_STREAM_DEPOSIT_FILES     - Change data capture for deposit files
 -- │
--- └─ TASKS (2):
---    ├─ LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS      - Serverless task for HQLA loading
---    └─ LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES   - Serverless task for deposit loading
+-- ├─ STORED PROCEDURES (1):
+-- │  └─ LIQI_CLEANUP_STAGE_KEEP_LAST_N     - Generic stage cleanup utility
+-- │
+-- └─ TASKS (4 - All Serverless: 2 load + 2 cleanup):
+--    ├─ LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS      - Automated HQLA loading
+--    ├─ LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES   - Automated deposit loading
+--    ├─ LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_HQLA_HOLDINGS      - Stage cleanup
+--    └─ LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DEPOSIT_BALANCES   - Stage cleanup
 --
 -- DATA FLOW:
 -- CSV Files → LIQI_RAW_STAGE_* → LIQI_RAW_STREAM_* → LIQI_RAW_TB_* → REP_AGG_001
@@ -282,8 +287,106 @@ AS
     PATTERN = '.*deposit_balances.*\\.csv'
     ON_ERROR = 'CONTINUE';
 
--- Start tasks
+-- ============================================================================
+-- MAINTENANCE PROCEDURES
+-- ============================================================================
+-- Utility stored procedures for schema maintenance and operations.
+
+-- ------------------------------------------------------------
+-- LIQI_CLEANUP_STAGE_KEEP_LAST_N - Generic Stage Cleanup Procedure
+-- ------------------------------------------------------------
+-- Removes oldest files from any stage in REP_RAW_001 schema, keeping only
+-- the N most recently modified files. Useful for managing stage storage
+-- costs and implementing data retention policies.
+--
+-- Parameters:
+--   STAGE_NAME: Stage name without @ prefix (e.g., 'LIQI_RAW_STAGE_HQLA_HOLDINGS')
+--   KEEP_N: Number of most recent files to retain
+--
+-- Returns: Summary string with deletion statistics
+--
+-- Usage Examples:
+--   CALL LIQI_CLEANUP_STAGE_KEEP_LAST_N('LIQI_RAW_STAGE_HQLA_HOLDINGS', 5);
+--   CALL LIQI_CLEANUP_STAGE_KEEP_LAST_N('LIQI_RAW_STAGE_DEPOSIT_BALANCES', 5);
+
+CREATE OR REPLACE PROCEDURE LIQI_CLEANUP_STAGE_KEEP_LAST_N (
+    STAGE_NAME STRING,
+    KEEP_N     NUMBER
+)
+RETURNS STRING
+LANGUAGE SQL
+COMMENT = 'Generic stage cleanup utility for REP_RAW_001 schema. Removes oldest files from a stage, keeping only the N most recently modified files.'
+EXECUTE AS CALLER
+AS
+$$
+DECLARE
+  V_DELETED NUMBER := 0;
+  V_FAILED  NUMBER := 0;
+  V_REL     STRING;
+  V_CMD     STRING;
+  V_QUERY   STRING;
+  
+  C1 CURSOR FOR
+    SELECT RELATIVE_PATH
+    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+    
+BEGIN
+  V_QUERY := 'SELECT RELATIVE_PATH FROM DIRECTORY(@' || STAGE_NAME || ') ' ||
+             'QUALIFY ROW_NUMBER() OVER (ORDER BY LAST_MODIFIED DESC) > ' || KEEP_N;
+  
+  EXECUTE IMMEDIATE V_QUERY;
+
+  OPEN C1;
+  FOR RECORD IN C1 DO
+    V_REL := RECORD.RELATIVE_PATH;
+    V_CMD := 'REMOVE @' || STAGE_NAME || '/' || V_REL;
+    
+    BEGIN
+      EXECUTE IMMEDIATE V_CMD;
+      V_DELETED := V_DELETED + 1;
+    EXCEPTION
+      WHEN OTHER THEN
+        V_FAILED := V_FAILED + 1;
+    END;
+  END FOR;
+  CLOSE C1;
+
+  RETURN 'Stage cleanup completed. Deleted: ' || V_DELETED || ' files, Failed: ' || V_FAILED || ' files, Kept: ' || KEEP_N || ' most recent files.';
+END;
+$$;
+
+-- ============================================================================
+-- AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage by keeping only the N most recent files.
+
+-- Cleanup task for HQLA holdings stage
+CREATE OR REPLACE TASK LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_HQLA_HOLDINGS
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after HQLA holdings data load. Keeps last 5 files to manage storage costs.'
+    AFTER LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS
+AS
+    CALL LIQI_CLEANUP_STAGE_KEEP_LAST_N('LIQI_RAW_STAGE_HQLA_HOLDINGS', 5);
+
+-- Cleanup task for deposit balances stage
+CREATE OR REPLACE TASK LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DEPOSIT_BALANCES
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after deposit balances data load. Keeps last 5 files to manage storage costs.'
+    AFTER LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES
+AS
+    CALL LIQI_CLEANUP_STAGE_KEEP_LAST_N('LIQI_RAW_STAGE_DEPOSIT_BALANCES', 5);
+
+-- ============================================================================
+-- TASK ACTIVATION
+-- ============================================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume child tasks before parent tasks
+ALTER TASK LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_HQLA_HOLDINGS RESUME;
 ALTER TASK LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS RESUME;
+
+ALTER TASK LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DEPOSIT_BALANCES RESUME;
 ALTER TASK LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES RESUME;
 
 -- ============================================================================

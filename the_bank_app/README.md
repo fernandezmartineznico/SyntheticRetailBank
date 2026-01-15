@@ -79,7 +79,7 @@ EMPA_AGG_VW_WORKLOAD_DISTRIBUTION -- Workload analysis
 EMPA_AGG_VW_CURRENT_ASSIGNMENTS -- Client-advisor relationships
 
 -- Semantic views (optional, for AI)
-CRMA_SEMANTIC_VIEW
+CRMA_SV_CUSTOMER_360 -- Customer 360 semantic view for Cortex AI
 CRMA_AGG_VW_CUSTOMER_RISK_PROFILE -- Risk metrics view
 
 -- LCR (Liquidity Coverage Ratio) tables (in REP_AGG_001, for LCR Monitoring tab)
@@ -571,7 +571,7 @@ python test_agents/test_single_agent.py CRM_CUSTOMER_360 "Show me PLATINUM custo
 **Solutions:**
 1. Verify Cortex AI Agent exists: `SNOWFLAKE_INTELLIGENCE.AGENTS.CRM_INTELLIGENCE_AGENT`
 2. Ensure user has USAGE privilege on agent
-3. Check semantic view is deployed: `CRMA_SEMANTIC_VIEW`
+3. Check semantic view is deployed: `CRMA_SV_CUSTOMER_360`
 4. Fallback: Use manual search in Customer 360° tab
 
 ### Performance Issues

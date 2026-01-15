@@ -38,8 +38,12 @@
 -- ┌─ STREAMS (1):
 -- │  └─ ACCI_RAW_STREAM_ACCOUNT_FILES - Detects new account files
 -- │
--- └─ TASKS (1):
---    └─ ACCI_RAW_TASK_LOAD_ACCOUNTS  - Automated account loading
+-- ┌─ STORED PROCEDURES (1):
+-- │  └─ CRMI_CLEANUP_STAGE_KEEP_LAST_N  - Generic stage cleanup utility (shared from 010_CRMI)
+-- │
+-- └─ TASKS (2 - All Serverless: 1 load + 1 cleanup):
+--    ├─ ACCI_RAW_TASK_LOAD_ACCOUNTS  - Automated account loading
+--    └─ ACCI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ACCOUNTS  - Stage cleanup
 --
 -- DATA ARCHITECTURE:
 -- File Upload → Stage → Stream Detection → Task Processing → Table
@@ -158,7 +162,28 @@ AS
 -- Tasks must be explicitly resumed to begin processing. This allows for
 -- controlled deployment and testing before enabling automated data flows.
 
--- Enable account data loading
+-- ============================================================
+-- AUTOMATED STAGE CLEANUP TASKS
+-- ============================================================
+-- Cleanup tasks that run after data loading completes to manage
+-- stage storage. Uses CRMI_CLEANUP_STAGE_KEEP_LAST_N procedure
+-- defined in 010_CRMI_customer_master.sql (same schema).
+
+-- Cleanup task for account data stage
+CREATE OR REPLACE TASK ACCI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ACCOUNTS
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    COMMENT = 'Automated stage cleanup after account data load. Keeps last 5 files to manage storage costs.'
+    AFTER ACCI_RAW_TASK_LOAD_ACCOUNTS
+AS
+    CALL CRMI_CLEANUP_STAGE_KEEP_LAST_N('ACCI_RAW_STAGE_ACCOUNTS', 5);
+
+-- ============================================================
+-- TASK ACTIVATION
+-- ============================================================
+-- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
+
+-- Resume child tasks before parent task
+ALTER TASK ACCI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ACCOUNTS RESUME;
 ALTER TASK ACCI_RAW_TASK_LOAD_ACCOUNTS RESUME;
 
 -- ============================================================

@@ -133,44 +133,86 @@ ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELIVERY_SCHEDULE RESUME;
 
 
 -- ============================================================
--- RESUME ALL TASKS (18 total across all schemas)
+-- RESUME ALL TASKS (33 total: 18 load tasks + 15 cleanup tasks)
 -- ============================================================
+-- IMPORTANT: Child tasks must be resumed BEFORE parent tasks!
 SELECT 'Resuming tasks...' AS status;
 
--- Resume CRM_RAW_001 Tasks (7 tasks)
+-- ============================================================
+-- Resume CRM_RAW_001 Tasks (13 tasks: 7 load + 6 cleanup)
+-- ============================================================
+-- Resume child tasks before parent tasks
+ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_CUSTOMERS RESUME;
 ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMERS RESUME;
+
+ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ADDRESSES RESUME;
 ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_ADDRESSES RESUME;
+
+ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EXPOSED_PERSON RESUME;
 ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_EXPOSED_PERSON RESUME;
-ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS RESUME;
+
 ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_STATUS RESUME;
+ALTER TASK CRM_RAW_001.CRMI_RAW_TASK_LOAD_CUSTOMER_EVENTS RESUME;
+
+ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMPLOYEES RESUME;
 ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_LOAD_EMPLOYEES RESUME;
+
+ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ASSIGNMENTS RESUME;
 ALTER TASK CRM_RAW_001.EMPI_RAW_TASK_LOAD_ASSIGNMENTS RESUME;
 
-       -- Resume ACC_RAW_001 Tasks (1 task) - Task is in CRM_RAW_001 schema
-       ALTER TASK CRM_RAW_001.ACCI_RAW_TASK_LOAD_ACCOUNTS RESUME;
+-- Resume ACC_RAW_001 Tasks (1 task) - Task is in CRM_RAW_001 schema
+ALTER TASK CRM_RAW_001.ACCI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_ACCOUNTS RESUME;
+ALTER TASK CRM_RAW_001.ACCI_RAW_TASK_LOAD_ACCOUNTS RESUME;
 
--- Resume REF_RAW_001 Tasks (1 task)
+-- ============================================================
+-- Resume REF_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
+ALTER TASK REF_RAW_001.REFI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_FX_RATES RESUME;
 ALTER TASK REF_RAW_001.REFI_RAW_TASK_LOAD_FX_RATES RESUME;
 
--- Resume PAY_RAW_001 Tasks (2 tasks)
+-- ============================================================
+-- Resume PAY_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup)
+-- ============================================================
+ALTER TASK PAY_RAW_001.PAYI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRANSACTIONS RESUME;
 ALTER TASK PAY_RAW_001.PAYI_RAW_TASK_LOAD_TRANSACTIONS RESUME;
+
+ALTER TASK PAY_RAW_001.ICGI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_SWIFT_MESSAGES RESUME;
 ALTER TASK PAY_RAW_001.ICGI_RAW_TASK_LOAD_SWIFT_MESSAGES RESUME;
 
--- Resume EQT_RAW_001 Tasks (1 task)
+-- ============================================================
+-- Resume EQT_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
+ALTER TASK EQT_RAW_001.EQTI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES RESUME;
 ALTER TASK EQT_RAW_001.EQTI_RAW_TASK_LOAD_TRADES RESUME;
 
--- Resume FII_RAW_001 Tasks (1 task)
+-- ============================================================
+-- Resume FII_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
+ALTER TASK FII_RAW_001.FIII_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES RESUME;
 ALTER TASK FII_RAW_001.FIII_LOAD_TRADES_TASK RESUME;
 
--- Resume CMD_RAW_001 Tasks (1 task)
+-- ============================================================
+-- Resume CMD_RAW_001 Tasks (2 tasks: 1 load + 1 cleanup)
+-- ============================================================
+ALTER TASK CMD_RAW_001.CMDI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES RESUME;
 ALTER TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK RESUME;
 
--- Resume LOA_RAW_V001 Tasks (2 tasks)
-ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_EMAILS RESUME;
-ALTER TASK LOA_RAW_V001.LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
+-- ============================================================
+-- Resume LOA_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup)
+-- ============================================================
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS RESUME;
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_EMAILS RESUME;
 
--- Resume REP_RAW_001 Tasks (2 tasks - FINMA LCR)
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS RESUME;
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
+
+-- ============================================================
+-- Resume REP_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup - FINMA LCR)
+-- ============================================================
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_HQLA_HOLDINGS RESUME;
 ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_HQLA_HOLDINGS RESUME;
+
+ALTER TASK REP_RAW_001.LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DEPOSIT_BALANCES RESUME;
 ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES RESUME;
 
 -- ============================================================
@@ -179,5 +221,5 @@ ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES RESUME;
 SELECT
     'DYNAMIC_RESUMPTION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 59 dynamic tables and 16 tasks have been resumed.' AS message,
+    'All 59 dynamic tables and 33 tasks have been resumed (18 load tasks + 15 cleanup tasks).' AS message,
     'System is now in operational mode.' AS next_step;
