@@ -40,7 +40,7 @@ SHOW TASKS IN DATABASE AAA_DEV_SYNTHETIC_BANK;
 SHOW DYNAMIC TABLES IN DATABASE AAA_DEV_SYNTHETIC_BANK;
 
 -- ============================================================
--- SUSPEND ALL DYNAMIC TABLES (59 total across all schemas)
+-- SUSPEND ALL DYNAMIC TABLES (71 total across all schemas)
 -- ============================================================
 SELECT 'Suspending dynamic tables...' AS status;
 
@@ -85,7 +85,7 @@ ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_BCBS239_DATA_QUALITY SUSPEND;
 -- Suspend REP_AGG_001 Dynamic Tables (Portfolio - 1 table)
 ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_PORTFOLIO_PERFORMANCE SUSPEND;
 
--- Suspend CRM_AGG_001 Dynamic Tables (10 tables: 6 CRM + 1 Account + 3 Employee Analytics)
+-- Suspend CRM_AGG_001 Dynamic Tables (11 tables: 7 CRM + 1 Account + 3 Employee Analytics)
 ALTER DYNAMIC TABLE CRM_AGG_001.CRMA_AGG_DT_ADDRESSES_CURRENT SUSPEND;
 ALTER DYNAMIC TABLE CRM_AGG_001.CRMA_AGG_DT_ADDRESSES_HISTORY SUSPEND;
 ALTER DYNAMIC TABLE CRM_AGG_001.CRMA_AGG_DT_CUSTOMER_CURRENT SUSPEND;
@@ -131,9 +131,24 @@ ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELTA_EXPOSURE SUSPEND;
 ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_VOLATILITY_ANALYSIS SUSPEND;
 ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELIVERY_SCHEDULE SUSPEND;
 
+-- Suspend REP_AGG_001 Dynamic Tables (LCR - 6 tables)
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_HQLA SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_OUTFLOW SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_HQLA_CALCULATION SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_OUTFLOW_CALCULATION SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_DAILY SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_TREND SUSPEND;
+
+-- Suspend REP_AGG_001 Dynamic Tables (Loan Portfolio - 5 tables)
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_PORTFOLIO_SUMMARY SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_LTV_DISTRIBUTION SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_APPLICATION_FUNNEL SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_AFFORDABILITY_SUMMARY SUSPEND;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_CUSTOMER_LOAN_SUMMARY SUSPEND;
+
 
 -- ============================================================
--- SUSPEND ALL TASKS (33 total: 18 load tasks + 15 cleanup tasks)
+-- SUSPEND ALL TASKS (34 total: 18 load tasks + 15 cleanup tasks + 1 DocAI root task)
 -- ============================================================
 SELECT 'Suspending tasks...' AS status;
 
@@ -193,12 +208,23 @@ ALTER TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK SUSPEND;
 ALTER TASK CMD_RAW_001.CMDI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES SUSPEND;
 
 -- ============================================================
--- Suspend LOA_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup)
+-- Suspend LOA_RAW_001 Tasks (2 tasks: DocAI pipeline)
 -- ============================================================
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_EMAILS SUSPEND;
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_DOCUMENTS SUSPEND;
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS SUSPEND;
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS SUSPEND;
+-- Note: Loan module uses simplified architecture with no separate load tasks
+-- - Email files are uploaded directly to LOAI_RAW_STAGE_EMAIL_INBOUND
+-- - Stream LOAI_RAW_STREAM_EMAIL_FILES detects new files
+-- - Task LOAI_RAW_TASK_EXTRACT_MAIL_DATA extracts data with AI_EXTRACT
+-- - Task LOAI_RAW_TASK_FLAT_MAIL_DATA flattens data (AFTER extraction)
+--
+-- IMPORTANT: These tasks have AFTER dependencies, so must suspend in order:
+-- 1. Child task first (FLAT_MAIL_DATA - depends on EXTRACT_MAIL_DATA)
+-- 2. Root task last (EXTRACT_MAIL_DATA - parent)
+
+-- Suspend root task first (reverse of resume order)
+ALTER TASK IF EXISTS LOA_RAW_001.LOAI_RAW_TASK_EXTRACT_MAIL_DATA SUSPEND;
+
+-- Suspend child task last
+ALTER TASK IF EXISTS LOA_RAW_001.LOAI_RAW_TASK_FLAT_MAIL_DATA SUSPEND;
 
 -- ============================================================
 -- Suspend REP_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup - FINMA LCR)
@@ -214,5 +240,6 @@ ALTER TASK REP_RAW_001.LIQI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DEPOSIT_BALANCES S
 SELECT
     'DYNAMIC_SUSPENSION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 59 dynamic tables and 33 tasks have been suspended (18 load tasks + 15 cleanup tasks).' AS message,
-    'System is now in maintenance mode.' AS next_step;
+    'All 71 dynamic tables and 32 tasks have been suspended.' AS message,
+    'Details: 71 DTs (29 REP, 11 CRM, 6 PAY, 3 EQT, 5 FII, 5 CMD, 1 REF, 6 LCR, 5 Loan), 32 tasks (16 load + 15 cleanup + 1 customer status).' AS details,
+    'System is now in maintenance mode. Loan DocAI pipeline suspended (2 tasks: EXTRACT + FLAT).' AS next_step;

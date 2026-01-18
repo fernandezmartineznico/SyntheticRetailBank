@@ -1,12 +1,14 @@
 -- ============================================================
+-- 361_LIQA_BusinessReporting_FINMA_LCR.sql
 -- REP_AGG_001 Schema - FINMA LCR Reporting & Analytics
 -- Generated on: 2026-01-07
 -- ============================================================
 --
 -- OVERVIEW:
 -- This schema contains final LCR ratio calculation, trend analysis, monthly
--- summaries, and automated compliance alerts for FINMA regulatory reporting.
--- Semantic view layer is in 750_LCRS_SemanticView.sql for dashboard/API consumption.
+-- summaries, automated compliance alerts for FINMA regulatory reporting, and
+-- dashboard-friendly views for notebooks and Streamlit apps. Semantic model
+-- for AI agent is in 750_LCRS_SV_LCR_SEMANTIC_MODELS.sql.
 --
 -- BUSINESS PURPOSE:
 -- - Calculate final LCR ratio: (HQLA Stock / Net Cash Outflows) × 100
@@ -22,13 +24,13 @@
 -- │  └─ REPP_AGG_DT_LCR_TREND  - 90-day rolling trend analysis
 -- │
 -- └─ VIEWS (3):
---    ├─ REPP_VW_LCR_MONITORING        - Consolidated LCR monitoring dashboard view
+--    ├─ REPP_AGG_VW_LCR_MONITORING      - Consolidated LCR monitoring dashboard view
 --    ├─ REPP_AGG_VW_LCR_MONTHLY_SUMMARY - Monthly aggregates for SNB submission
 --    └─ REPP_AGG_VW_LCR_ALERTS          - Real-time compliance alerts
 --
 -- DATA FLOW:
 -- REPP_AGG_DT_LCR_HQLA → ┐
---                        ├→ REPP_AGG_DT_LCR_DAILY → REPP_AGG_DT_LCR_TREND → REPP_VW_LCR_MONITORING
+--                        ├→ REPP_AGG_DT_LCR_DAILY → REPP_AGG_DT_LCR_TREND → REPP_AGG_VW_LCR_MONITORING
 -- REPP_AGG_DT_LCR_OUTFLOW→┘                ↓                                     (Dashboard)
 --                                   REPP_AGG_VW_LCR_MONTHLY_SUMMARY (SNB)
 --                                   REPP_AGG_VW_LCR_ALERTS (Compliance)
@@ -317,7 +319,7 @@ ORDER BY REPORTING_MONTH DESC;
 -- - Alert flags for compliance breaches and high volatility
 -- ============================================================================
 
-CREATE OR REPLACE VIEW REPP_VW_LCR_MONITORING 
+CREATE OR REPLACE VIEW REPP_AGG_VW_LCR_MONITORING 
     COMMENT = 'Consolidated LCR monitoring dashboard view combining all key liquidity metrics in a single row. Integrates latest daily LCR ratio, compliance status, HQLA breakdown (L1/L2A/L2B), deposit outflow analysis (Retail/Corporate/FI), trend metrics (7/30/90-day averages), volatility measures, and automated alert flags. Optimized for Treasury dashboards, executive reporting, and downstream application integration. Single source of truth for current liquidity position and regulatory compliance status. Updated in real-time via underlying dynamic tables for operational decision-making and management escalation.'
     AS
 WITH latest_lcr AS (
@@ -513,14 +515,413 @@ SELECT
 FROM alerts;
 
 -- ============================================================================
+-- DASHBOARD & NOTEBOOK VIEWS (User-Friendly LCR Views)
+-- ============================================================================
+-- Simplified views for Streamlit dashboards, Jupyter notebooks, and AI agent
+-- queries. These views provide business-friendly column names, pre-calculated
+-- percentages, and optimized data structures for visualization tools.
+-- ============================================================================
+
+-- ============================================================================
+-- VIEW: CURRENT LCR STATUS (Single-Row Summary)
+-- ============================================================================
+CREATE OR REPLACE VIEW LCRS_AGG_VW_LCR_CURRENT
+COMMENT = 'Current LCR status - single row with all key metrics for executive dashboard. Returns latest available LCR calculation with compliance status, HQLA composition, outflow breakdown, and buffer analysis. Optimized for fast retrieval and notebook queries.'
+AS
+SELECT 
+    -- Date and Identity
+    AS_OF_DATE AS REPORTING_DATE,
+    BANK_ID,
+    
+    -- Primary LCR Metric
+    LCR_RATIO AS LCR_RATIO_PCT,
+    LCR_STATUS AS COMPLIANCE_STATUS,
+    SEVERITY AS STATUS_COLOR,
+    
+    -- HQLA Composition (Numerator)
+    HQLA_TOTAL AS HQLA_TOTAL_CHF,
+    L1_TOTAL AS LEVEL1_ASSETS_CHF,
+    L2A_TOTAL AS LEVEL2A_ASSETS_CHF,
+    L2B_TOTAL AS LEVEL2B_ASSETS_CHF,
+    L2_CAPPED AS LEVEL2_ASSETS_AFTER_CAP_CHF,
+    L2_UNCAPPED AS LEVEL2_ASSETS_BEFORE_CAP_CHF,
+    
+    -- HQLA Percentages
+    ROUND(L1_TOTAL / NULLIF(HQLA_TOTAL, 0) * 100, 1) AS LEVEL1_PCT_OF_HQLA,
+    ROUND(L2_CAPPED / NULLIF(HQLA_TOTAL, 0) * 100, 1) AS LEVEL2_PCT_OF_HQLA,
+    
+    -- 40% Cap Analysis
+    CAP_APPLIED AS IS_40PCT_CAP_APPLIED,
+    DISCARDED_L2 AS DISCARDED_LEVEL2_CHF,
+    ROUND((L2_UNCAPPED / NULLIF(L1_TOTAL, 0) * 100 * 1.5) - 40, 1) AS CAP_BUFFER_PCT,  -- Distance to 40% cap
+    
+    -- Net Cash Outflows (Denominator)
+    OUTFLOW_TOTAL AS NET_CASH_OUTFLOWS_CHF,
+    OUTFLOW_RETAIL AS RETAIL_OUTFLOWS_CHF,
+    OUTFLOW_CORP AS CORPORATE_OUTFLOWS_CHF,
+    OUTFLOW_FI AS FINANCIAL_INST_OUTFLOWS_CHF,
+    
+    -- Outflow Percentages
+    ROUND(OUTFLOW_RETAIL / NULLIF(OUTFLOW_TOTAL, 0) * 100, 1) AS RETAIL_PCT_OF_OUTFLOWS,
+    ROUND(OUTFLOW_CORP / NULLIF(OUTFLOW_TOTAL, 0) * 100, 1) AS CORPORATE_PCT_OF_OUTFLOWS,
+    ROUND(OUTFLOW_FI / NULLIF(OUTFLOW_TOTAL, 0) * 100, 1) AS FI_PCT_OF_OUTFLOWS,
+    
+    -- Liquidity Buffer Analysis
+    LCR_BUFFER_CHF AS LIQUIDITY_BUFFER_CHF,
+    LCR_BUFFER_PCT AS BUFFER_PCT_OF_OUTFLOWS,
+    CASE 
+        WHEN LCR_BUFFER_PCT >= 50 THEN 'STRONG'
+        WHEN LCR_BUFFER_PCT >= 20 THEN 'ADEQUATE'
+        WHEN LCR_BUFFER_PCT >= 10 THEN 'MODERATE'
+        WHEN LCR_BUFFER_PCT >= 0 THEN 'MINIMAL'
+        ELSE 'BREACH'
+    END AS BUFFER_STRENGTH,
+    
+    -- Portfolio Metrics
+    TOTAL_HOLDINGS AS HQLA_SECURITIES_COUNT,
+    TOTAL_DEPOSIT_ACCOUNTS AS DEPOSIT_ACCOUNTS_COUNT,
+    
+    -- Calculation Metadata
+    CALCULATION_TIMESTAMP AS LAST_CALCULATED_UTC,
+    DATEDIFF(MINUTE, CALCULATION_TIMESTAMP, CURRENT_TIMESTAMP()) AS CALCULATION_AGE_MINUTES,
+    CASE 
+        WHEN DATEDIFF(MINUTE, CALCULATION_TIMESTAMP, CURRENT_TIMESTAMP()) <= 60 THEN 'FRESH'
+        WHEN DATEDIFF(MINUTE, CALCULATION_TIMESTAMP, CURRENT_TIMESTAMP()) <= 120 THEN 'RECENT'
+        ELSE 'STALE'
+    END AS DATA_FRESHNESS
+
+FROM REPP_AGG_DT_LCR_DAILY
+WHERE AS_OF_DATE = (SELECT MAX(AS_OF_DATE) FROM REPP_AGG_DT_LCR_DAILY)
+;
+
+-- ============================================================================
+-- VIEW: HQLA BREAKDOWN BY LEVEL AND ASSET TYPE
+-- ============================================================================
+CREATE OR REPLACE VIEW LCRS_AGG_VW_HQLA_BREAKDOWN
+COMMENT = 'HQLA composition by level (L1/L2A/L2B) and asset type with market value, haircuts, and percentage of total. Used for portfolio analysis, rebalancing decisions, and notebook queries about asset composition. Includes all HQLA holdings for latest reporting date.'
+AS
+WITH latest_date AS (
+    SELECT MAX(AS_OF_DATE) AS AS_OF_DATE
+    FROM REPP_AGG_DT_LCR_HQLA
+),
+total_hqla AS (
+    SELECT HQLA_TOTAL
+    FROM REPP_AGG_DT_LCR_DAILY
+    WHERE AS_OF_DATE = (SELECT AS_OF_DATE FROM latest_date)
+)
+SELECT 
+    h.AS_OF_DATE AS REPORTING_DATE,
+    h.HQLA_LEVEL AS ASSET_LEVEL,
+    h.ASSET_TYPE,
+    
+    -- Market Values
+    SUM(h.MARKET_VALUE_CHF) AS MARKET_VALUE_CHF,
+    ROUND(SUM(h.MARKET_VALUE_CHF) / 1e9, 2) AS MARKET_VALUE_BILLIONS,
+    
+    -- Haircut Information
+    AVG(h.HAIRCUT_PCT) AS HAIRCUT_PCT,
+    CASE 
+        WHEN h.HQLA_LEVEL = 'L1' THEN 0
+        WHEN h.HQLA_LEVEL = 'L2A' THEN 15
+        WHEN h.HQLA_LEVEL = 'L2B' THEN 50
+        ELSE NULL
+    END AS STANDARD_HAIRCUT_PCT,
+    
+    -- HQLA Value (After Haircut)
+    SUM(h.HQLA_VALUE_CHF) AS HQLA_VALUE_CHF,
+    ROUND(SUM(h.HQLA_VALUE_CHF) / 1e9, 2) AS HQLA_VALUE_BILLIONS,
+    
+    -- Portfolio Composition
+    COUNT(*) AS HOLDINGS_COUNT,
+    ROUND(SUM(h.HQLA_VALUE_CHF) / (SELECT HQLA_TOTAL FROM total_hqla) * 100, 1) AS PCT_OF_TOTAL_HQLA,
+    
+    -- Level Grouping (for charts)
+    CASE 
+        WHEN h.HQLA_LEVEL = 'L1' THEN 1
+        WHEN h.HQLA_LEVEL = 'L2A' THEN 2
+        WHEN h.HQLA_LEVEL = 'L2B' THEN 3
+        ELSE 4
+    END AS LEVEL_SORT_ORDER,
+    
+    -- Asset Quality Indicator
+    CASE 
+        WHEN h.HQLA_LEVEL = 'L1' THEN 'Highest Quality (No Haircut)'
+        WHEN h.HQLA_LEVEL = 'L2A' THEN 'High Quality (15% Haircut)'
+        WHEN h.HQLA_LEVEL = 'L2B' THEN 'Medium Quality (50% Haircut)'
+        ELSE 'Unknown'
+    END AS QUALITY_DESCRIPTION
+
+FROM REPP_AGG_DT_LCR_HQLA h
+CROSS JOIN latest_date ld
+WHERE h.AS_OF_DATE = ld.AS_OF_DATE
+GROUP BY 
+    h.AS_OF_DATE,
+    h.HQLA_LEVEL,
+    h.ASSET_TYPE,
+    LEVEL_SORT_ORDER,
+    QUALITY_DESCRIPTION
+
+ORDER BY 
+    LEVEL_SORT_ORDER,
+    HQLA_VALUE_CHF DESC
+;
+
+-- ============================================================================
+-- VIEW: DEPOSIT OUTFLOW BREAKDOWN BY COUNTERPARTY TYPE
+-- ============================================================================
+CREATE OR REPLACE VIEW LCRS_AGG_VW_OUTFLOW_BREAKDOWN
+COMMENT = 'Deposit outflow breakdown by counterparty type showing balances, run-off rates, and outflow amounts. Used for funding strategy analysis and notebook queries about deposit composition. Includes percentage breakdowns for executive reporting and waterfall chart visualization.'
+AS
+WITH latest_date AS (
+    SELECT MAX(AS_OF_DATE) AS AS_OF_DATE
+    FROM REPP_AGG_DT_LCR_OUTFLOW
+),
+total_outflows AS (
+    SELECT OUTFLOW_TOTAL
+    FROM REPP_AGG_DT_LCR_DAILY
+    WHERE AS_OF_DATE = (SELECT AS_OF_DATE FROM latest_date)
+)
+SELECT 
+    o.AS_OF_DATE AS REPORTING_DATE,
+    o.COUNTERPARTY_TYPE,
+    
+    -- Deposit Balances
+    SUM(o.BALANCE_CHF) AS DEPOSIT_BALANCE_CHF,
+    ROUND(SUM(o.BALANCE_CHF) / 1e9, 2) AS DEPOSIT_BALANCE_BILLIONS,
+    
+    -- Run-off Rates
+    AVG(o.RUN_OFF_RATE) AS AVG_RUN_OFF_RATE_PCT,
+    MIN(o.RUN_OFF_RATE) AS MIN_RUN_OFF_RATE_PCT,
+    MAX(o.RUN_OFF_RATE) AS MAX_RUN_OFF_RATE_PCT,
+    
+    -- Stressed Outflows
+    SUM(o.OUTFLOW_AMOUNT_CHF) AS OUTFLOW_AMOUNT_CHF,
+    ROUND(SUM(o.OUTFLOW_AMOUNT_CHF) / 1e9, 2) AS OUTFLOW_AMOUNT_BILLIONS,
+    
+    -- Portfolio Composition
+    COUNT(*) AS ACCOUNT_COUNT,
+    ROUND(SUM(o.OUTFLOW_AMOUNT_CHF) / (SELECT OUTFLOW_TOTAL FROM total_outflows) * 100, 1) AS PCT_OF_TOTAL_OUTFLOWS,
+    ROUND(SUM(o.BALANCE_CHF) / SUM(SUM(o.BALANCE_CHF)) OVER () * 100, 1) AS PCT_OF_TOTAL_DEPOSITS,
+    
+    -- Implied Run-off (for validation)
+    ROUND(SUM(o.OUTFLOW_AMOUNT_CHF) / NULLIF(SUM(o.BALANCE_CHF), 0) * 100, 1) AS EFFECTIVE_RUN_OFF_PCT,
+    
+    -- Counterparty Category
+    CASE 
+        WHEN o.COUNTERPARTY_TYPE LIKE 'RETAIL%' THEN 'Retail Deposits'
+        WHEN o.COUNTERPARTY_TYPE LIKE 'CORPORATE%' THEN 'Corporate Deposits'
+        WHEN o.COUNTERPARTY_TYPE = 'FINANCIAL_INSTITUTION' THEN 'Wholesale Funding'
+        ELSE 'Other'
+    END AS COUNTERPARTY_CATEGORY,
+    
+    -- Risk Classification
+    CASE 
+        WHEN AVG(o.RUN_OFF_RATE) <= 5 THEN 'Very Stable'
+        WHEN AVG(o.RUN_OFF_RATE) <= 15 THEN 'Stable'
+        WHEN AVG(o.RUN_OFF_RATE) <= 30 THEN 'Moderate Risk'
+        WHEN AVG(o.RUN_OFF_RATE) <= 50 THEN 'High Risk'
+        ELSE 'Very High Risk'
+    END AS STABILITY_RATING,
+    
+    -- Sort Order (for waterfall chart)
+    CASE 
+        WHEN o.COUNTERPARTY_TYPE = 'RETAIL_STABLE' THEN 1
+        WHEN o.COUNTERPARTY_TYPE = 'RETAIL_LESS_STABLE' THEN 2
+        WHEN o.COUNTERPARTY_TYPE = 'RETAIL_INSURED' THEN 3
+        WHEN o.COUNTERPARTY_TYPE = 'CORPORATE_OPERATIONAL' THEN 4
+        WHEN o.COUNTERPARTY_TYPE = 'CORPORATE_NON_OPERATIONAL' THEN 5
+        WHEN o.COUNTERPARTY_TYPE = 'FINANCIAL_INSTITUTION' THEN 6
+        WHEN o.COUNTERPARTY_TYPE = 'WHOLESALE_FUNDING' THEN 7
+        ELSE 8
+    END AS DISPLAY_ORDER
+
+FROM REPP_AGG_DT_LCR_OUTFLOW o
+CROSS JOIN latest_date ld
+WHERE o.AS_OF_DATE = ld.AS_OF_DATE
+GROUP BY 
+    o.AS_OF_DATE,
+    o.COUNTERPARTY_TYPE,
+    COUNTERPARTY_CATEGORY,
+    DISPLAY_ORDER
+
+ORDER BY 
+    DISPLAY_ORDER
+;
+
+-- ============================================================================
+-- VIEW: 90-DAY LCR TREND WITH MOVING AVERAGES
+-- ============================================================================
+CREATE OR REPLACE VIEW LCRS_AGG_VW_TREND_90DAY
+COMMENT = '90-day LCR historical trend with 7-day and 30-day moving averages. Used for volatility analysis, compliance tracking, and notebook queries about historical performance. Includes day-over-day change calculations and breach detection for management escalation.'
+AS
+SELECT 
+    AS_OF_DATE AS REPORTING_DATE,
+    
+    -- Daily LCR Metrics
+    LCR_RATIO AS LCR_RATIO_PCT,
+    LCR_STATUS AS COMPLIANCE_STATUS,
+    SEVERITY AS STATUS_COLOR,
+    
+    -- HQLA and Outflows
+    HQLA_TOTAL AS HQLA_TOTAL_CHF,
+    OUTFLOW_TOTAL AS OUTFLOW_TOTAL_CHF,
+    LCR_BUFFER_CHF AS LIQUIDITY_BUFFER_CHF,
+    
+    -- Moving Averages (Trend Analysis)
+    ROUND(AVG(LCR_RATIO) OVER (
+        ORDER BY AS_OF_DATE 
+        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    ), 2) AS MA7_LCR_RATIO,
+    
+    ROUND(AVG(LCR_RATIO) OVER (
+        ORDER BY AS_OF_DATE 
+        ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+    ), 2) AS MA30_LCR_RATIO,
+    
+    -- Day-over-Day Change (Volatility)
+    ROUND(LCR_RATIO - LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE), 2) AS DAY_OVER_DAY_CHANGE_PCT,
+    
+    ROUND((LCR_RATIO - LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE)) / 
+          NULLIF(LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE), 0) * 100, 2) AS DAY_OVER_DAY_CHANGE_PERCENT,
+    
+    -- Volatility Classification
+    CASE 
+        WHEN ABS(LCR_RATIO - LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE)) <= 2 THEN 'Stable'
+        WHEN ABS(LCR_RATIO - LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE)) <= 5 THEN 'Moderate'
+        WHEN ABS(LCR_RATIO - LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE)) <= 10 THEN 'High'
+        ELSE 'Very High'
+    END AS VOLATILITY_RATING,
+    
+    -- Breach Detection
+    CASE WHEN LCR_RATIO < 100 THEN TRUE ELSE FALSE END AS IS_BREACH,
+    CASE WHEN LCR_RATIO < 105 THEN TRUE ELSE FALSE END AS IS_WARNING,
+    
+    -- Consecutive Days Analysis
+    SUM(CASE WHEN LCR_RATIO < 100 THEN 1 ELSE 0 END) OVER (
+        ORDER BY AS_OF_DATE 
+        ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+    ) AS CONSECUTIVE_BREACH_DAYS_3DAY,
+    
+    -- Trend Direction
+    CASE 
+        WHEN LCR_RATIO > LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE) THEN 'Improving'
+        WHEN LCR_RATIO < LAG(LCR_RATIO) OVER (ORDER BY AS_OF_DATE) THEN 'Declining'
+        ELSE 'Stable'
+    END AS TREND_DIRECTION,
+    
+    -- Distance from Threshold
+    ROUND(LCR_RATIO - 100, 1) AS DISTANCE_FROM_MINIMUM_PCT,
+    ROUND(LCR_RATIO - 110, 1) AS DISTANCE_FROM_TARGET_PCT,
+    
+    -- Calculation Metadata
+    CALCULATION_TIMESTAMP AS LAST_CALCULATED_UTC,
+    CAP_APPLIED AS IS_40PCT_CAP_APPLIED
+
+FROM REPP_AGG_DT_LCR_DAILY
+
+WHERE AS_OF_DATE >= DATEADD(day, -90, CURRENT_DATE())
+
+ORDER BY AS_OF_DATE DESC
+;
+
+-- ============================================================================
+-- VIEW: ACTIVE COMPLIANCE ALERTS
+-- ============================================================================
+CREATE OR REPLACE VIEW LCRS_AGG_VW_ALERTS_ACTIVE
+COMMENT = 'Active LCR compliance alerts filtered for dashboard display. Pre-filtered to show only unresolved alerts requiring attention. Used for notebook queries and real-time monitoring dashboards. Includes severity classification and recommended actions for Treasury escalation.'
+AS
+WITH flattened_alerts AS (
+    SELECT 
+        a.AS_OF_DATE,
+        a.LCR_RATIO,
+        a.LCR_STATUS,
+        a.SEVERITY AS OVERALL_SEVERITY,
+        f.VALUE:type::STRING AS ALERT_TYPE,
+        f.VALUE:severity::STRING AS SEVERITY,
+        f.VALUE:message::STRING AS ALERT_MESSAGE,
+        f.VALUE:action::STRING AS SYSTEM_ACTION,
+        a.ALERT_TIMESTAMP
+    FROM REPP_AGG_VW_LCR_ALERTS a,
+    LATERAL FLATTEN(input => a.ALL_ALERTS) f
+    WHERE ARRAY_SIZE(a.ALL_ALERTS) > 0
+)
+SELECT 
+    AS_OF_DATE AS ALERT_DATE,
+    ALERT_TYPE,
+    SEVERITY,
+    ALERT_MESSAGE AS DESCRIPTION,
+    
+    -- Alert Details
+    LCR_RATIO AS CURRENT_LCR_RATIO,
+    CASE 
+        WHEN ALERT_TYPE = 'LCR_BREACH_CRITICAL' THEN 95.0
+        WHEN ALERT_TYPE IN ('LCR_BREACH', 'LCR_WARNING') THEN 100.0
+        WHEN ALERT_TYPE IN ('HIGH_VOLATILITY', 'MODERATE_VOLATILITY') THEN NULL
+        WHEN ALERT_TYPE = 'L2_CAP_APPLIED' THEN 66.67
+        ELSE NULL
+    END AS ALERT_THRESHOLD,
+    
+    -- Context for Action
+    SYSTEM_ACTION AS RECOMMENDED_ACTION,
+    
+    -- Severity Classification
+    CASE 
+        WHEN SEVERITY = 'CRITICAL' THEN 1
+        WHEN SEVERITY = 'HIGH' THEN 2
+        WHEN SEVERITY = 'MEDIUM' THEN 3
+        WHEN SEVERITY = 'INFO' THEN 4
+        ELSE 5
+    END AS SEVERITY_PRIORITY,
+    
+    -- Time Criticality
+    DATEDIFF(day, AS_OF_DATE, CURRENT_DATE()) AS DAYS_SINCE_ALERT,
+    CASE 
+        WHEN DATEDIFF(day, AS_OF_DATE, CURRENT_DATE()) = 0 THEN 'Today'
+        WHEN DATEDIFF(day, AS_OF_DATE, CURRENT_DATE()) = 1 THEN 'Yesterday'
+        WHEN DATEDIFF(day, AS_OF_DATE, CURRENT_DATE()) <= 7 THEN 'This Week'
+        ELSE 'Older'
+    END AS ALERT_AGE,
+    
+    -- Alert Category
+    CASE 
+        WHEN ALERT_TYPE IN ('LCR_BREACH', 'LCR_BREACH_CRITICAL', 'LCR_WARNING') THEN 'Compliance Alert'
+        WHEN ALERT_TYPE IN ('HIGH_VOLATILITY', 'MODERATE_VOLATILITY') THEN 'Risk Alert'
+        WHEN ALERT_TYPE = 'L2_CAP_APPLIED' THEN 'Portfolio Alert'
+        ELSE 'Operational Alert'
+    END AS ALERT_CATEGORY,
+    
+    -- Escalation Flag
+    CASE 
+        WHEN ALERT_TYPE = 'LCR_BREACH' AND DATEDIFF(hour, AS_OF_DATE, CURRENT_TIMESTAMP()) > 24 
+        THEN TRUE
+        ELSE FALSE
+    END AS ESCALATION_REQUIRED,
+    
+    ALERT_TIMESTAMP AS ALERT_GENERATED_UTC
+
+FROM flattened_alerts
+
+WHERE AS_OF_DATE >= DATEADD(day, -30, CURRENT_DATE())  -- Last 30 days only
+
+ORDER BY 
+    SEVERITY_PRIORITY ASC,  -- CRITICAL first
+    AS_OF_DATE DESC         -- Most recent first
+;
+
+-- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
 -- Note: Permissions for REP_AGG_001 schema are managed centrally in 000_database_setup.sql
 -- Grant specific permissions for LCR-related objects:
 
--- GRANT SELECT ON VIEW REPP_VW_LCR_MONITORING TO ROLE ANALYST;
+-- GRANT SELECT ON VIEW REPP_AGG_VW_LCR_MONITORING TO ROLE ANALYST;
 -- GRANT SELECT ON VIEW REPP_AGG_VW_LCR_MONTHLY_SUMMARY TO ROLE ANALYST;
 -- GRANT SELECT ON VIEW REPP_AGG_VW_LCR_ALERTS TO ROLE ANALYST;
+-- GRANT SELECT ON VIEW LCRS_SV_LCR_CURRENT TO ROLE ANALYST;
+-- GRANT SELECT ON VIEW LCRS_SV_HQLA_BREAKDOWN TO ROLE ANALYST;
+-- GRANT SELECT ON VIEW LCRS_SV_OUTFLOW_BREAKDOWN TO ROLE ANALYST;
+-- GRANT SELECT ON VIEW LCRS_SV_TREND_90DAY TO ROLE ANALYST;
+-- GRANT SELECT ON VIEW LCRS_SV_ALERTS_ACTIVE TO ROLE ANALYST;
 
 -- ============================================================================
 -- END OF SCRIPT

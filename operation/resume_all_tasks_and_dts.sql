@@ -85,7 +85,7 @@ ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_BCBS239_DATA_QUALITY RESUME;
 -- Resume REP_AGG_001 Dynamic Tables (Portfolio - 1 table)
 ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_PORTFOLIO_PERFORMANCE RESUME;
 
--- Resume CRM_AGG_001 Dynamic Tables (10 tables: 6 CRM + 1 Account + 3 Employee Analytics)
+-- Resume CRM_AGG_001 Dynamic Tables (11 tables: 7 CRM + 1 Account + 3 Employee Analytics)
 ALTER DYNAMIC TABLE CRM_AGG_001.CRMA_AGG_DT_ADDRESSES_CURRENT RESUME;
 ALTER DYNAMIC TABLE CRM_AGG_001.CRMA_AGG_DT_ADDRESSES_HISTORY RESUME;
 ALTER DYNAMIC TABLE CRM_AGG_001.CRMA_AGG_DT_CUSTOMER_CURRENT RESUME;
@@ -131,9 +131,24 @@ ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELTA_EXPOSURE RESUME;
 ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_VOLATILITY_ANALYSIS RESUME;
 ALTER DYNAMIC TABLE CMD_AGG_001.CMDA_AGG_DT_DELIVERY_SCHEDULE RESUME;
 
+-- Resume REP_AGG_001 Dynamic Tables (LCR - 6 tables)
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_HQLA RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_OUTFLOW RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_HQLA_CALCULATION RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_OUTFLOW_CALCULATION RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_DAILY RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_TREND RESUME;
+
+-- Resume REP_AGG_001 Dynamic Tables (Loan Portfolio - 5 tables)
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_PORTFOLIO_SUMMARY RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_LTV_DISTRIBUTION RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_APPLICATION_FUNNEL RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_AFFORDABILITY_SUMMARY RESUME;
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_CUSTOMER_LOAN_SUMMARY RESUME;
+
 
 -- ============================================================
--- RESUME ALL TASKS (33 total: 18 load tasks + 15 cleanup tasks)
+-- RESUME ALL TASKS (34 total: 18 load tasks + 15 cleanup tasks + 1 DocAI root task)
 -- ============================================================
 -- IMPORTANT: Child tasks must be resumed BEFORE parent tasks!
 SELECT 'Resuming tasks...' AS status;
@@ -198,13 +213,19 @@ ALTER TASK CMD_RAW_001.CMDI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_TRADES RESUME;
 ALTER TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK RESUME;
 
 -- ============================================================
--- Resume LOA_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup)
+-- Resume LOA_RAW_001 Tasks (2 tasks: DocAI pipeline)
 -- ============================================================
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS RESUME;
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_EMAILS RESUME;
+-- Note: Loan module uses simplified architecture with no separate load tasks
+-- - Email files are uploaded directly to LOAI_RAW_STAGE_EMAIL_INBOUND
+-- - Stream LOAI_RAW_STREAM_EMAIL_FILES detects new files
+-- - Task LOAI_RAW_TASK_EXTRACT_MAIL_DATA extracts data with AI_EXTRACT
+-- - Task LOAI_RAW_TASK_FLAT_MAIL_DATA flattens data (AFTER extraction)
 
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS RESUME;
-ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
+-- Resume child task first (FLAT_MAIL_DATA - flattens extracted data)
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_FLAT_MAIL_DATA RESUME;
+
+-- Resume root task last (EXTRACT_MAIL_DATA - triggers child via AFTER clause)
+ALTER TASK LOA_RAW_001.LOAI_RAW_TASK_EXTRACT_MAIL_DATA RESUME;
 
 -- ============================================================
 -- Resume REP_RAW_001 Tasks (4 tasks: 2 load + 2 cleanup - FINMA LCR)
@@ -221,5 +242,6 @@ ALTER TASK REP_RAW_001.LIQI_RAW_TASK_LOAD_DEPOSIT_BALANCES RESUME;
 SELECT
     'DYNAMIC_RESUMPTION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 59 dynamic tables and 33 tasks have been resumed (18 load tasks + 15 cleanup tasks).' AS message,
-    'System is now in operational mode.' AS next_step;
+    'All 71 dynamic tables and 32 tasks have been resumed.' AS message,
+    'Details: 71 DTs (29 REP, 11 CRM, 6 PAY, 3 EQT, 5 FII, 5 CMD, 1 REF, 6 LCR, 5 Loan), 32 tasks (16 load + 15 cleanup + 1 customer status).' AS details,
+    'System is now in operational mode. Loan DocAI pipeline active (EXTRACT task triggers FLAT_MAIL_DATA via AFTER clause).' AS next_step;

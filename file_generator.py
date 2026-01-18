@@ -217,6 +217,57 @@ class FileGenerator:
             "daily_file_count": len(daily_files)
         }
     
+    def generate_minimal_files(self) -> dict:
+        """Generate minimal customer files required as dependencies for specific generators.
+        
+        This is used when specific generation flags are provided (e.g., --generate-address-updates)
+        to avoid generating all default data (transactions, FX rates, equity trades, etc.).
+        
+        Generates ONLY:
+        - Customer master data (customers.csv)
+        - Customer addresses (customer_addresses.csv)
+        
+        Returns:
+            dict: Summary of generated files with minimal information
+        """
+        # Create minimal directory structure
+        self.master_data_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"\nGenerating minimal customer data in: {self.output_dir.absolute()}")
+        print(f"Configuration: {self.config.num_customers} customers")
+        
+        # Generate customers and addresses
+        print("\nGenerating customer data...")
+        customer_generator = CustomerGenerator(self.config)
+        customers, customer_addresses = customer_generator.generate_customers()
+        
+        # Add fuzzy matching test customer for PEP screening testing
+        print("Adding fuzzy matching test customer for PEP screening...")
+        test_customer, test_address = customer_generator.add_fuzzy_matching_test_customer()
+        print(f"Added test customer: {test_customer.first_name} {test_customer.family_name} (ID: {test_customer.customer_id})")
+        
+        # Save customer master data (including fuzzy matching test customer)
+        customer_file = self.master_data_dir / "customers.csv"
+        customer_generator.save_customers_to_csv(str(customer_file))
+        
+        # Save customer address data (SCD Type 2)
+        address_file = self.master_data_dir / "customer_addresses.csv"
+        customer_generator.save_addresses_to_csv(str(address_file))
+        
+        anomalous_customers = customer_generator.get_anomalous_customers()
+        print(f"✅ Generated {len(customers)} customers ({len(anomalous_customers)} anomalous)")
+        print(f"📁 Customer data saved to: {customer_file}")
+        print(f"📁 Address data saved to: {address_file}")
+        print(f"   Total address records: {len(customer_addresses)} (append-only base table)")
+        
+        return {
+            "customer_file": str(customer_file),
+            "address_file": str(address_file),
+            "total_customers": len(customers),
+            "anomalous_customers": len(anomalous_customers),
+            "minimal_mode": True
+        }
+    
     def _generate_summary_report(self, customers: List, anomalous_customers: List, 
                                transactions: List, daily_files: List[str], accounts: List, fx_rates: List,
                                equity_summary: dict, additional_results: dict = None,

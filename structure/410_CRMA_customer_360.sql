@@ -333,8 +333,13 @@ ORDER BY CUSTOMER_ID, INSERT_TIMESTAMP_UTC;
 -- ============================================================
 -- CRMA_AGG_DT_CUSTOMER_LIFECYCLE - Customer Lifecycle Analysis (Analytical)
 -- ============================================================
+-- CRMA_AGG_DT_CUSTOMER_LIFECYCLE - Customer Lifecycle Event Analysis
+-- ============================================================
 -- Comprehensive customer lifecycle view combining master data with lifecycle events
 -- for customer journey analysis, retention tracking, and engagement measurement.
+-- Uses actual event types from customer_lifecycle_generator.py:
+-- ONBOARDING, ADDRESS_CHANGE, EMPLOYMENT_CHANGE, ACCOUNT_UPGRADE, 
+-- ACCOUNT_DOWNGRADE, ACCOUNT_CLOSE, REACTIVATION, CHURN
 
 CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_LIFECYCLE(
     CUSTOMER_ID VARCHAR(30) COMMENT 'Customer identifier for lifecycle tracking',
@@ -348,16 +353,14 @@ CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_LIFECYCLE(
     FIRST_EVENT_DATE DATE COMMENT 'Date of first lifecycle event',
     LAST_EVENT_DATE DATE COMMENT 'Date of most recent lifecycle event',
     DAYS_SINCE_LAST_EVENT NUMBER(10,0) COMMENT 'Days since last lifecycle activity',
-    ACCOUNT_OPENED_COUNT NUMBER(10,0) COMMENT 'Number of ACCOUNT_OPENED events',
-    ACCOUNT_CLOSED_COUNT NUMBER(10,0) COMMENT 'Number of ACCOUNT_CLOSED events',
-    TIER_UPGRADE_COUNT NUMBER(10,0) COMMENT 'Number of TIER_UPGRADE events',
-    TIER_DOWNGRADE_COUNT NUMBER(10,0) COMMENT 'Number of TIER_DOWNGRADE events',
+    ONBOARDING_COUNT NUMBER(10,0) COMMENT 'Number of ONBOARDING events (should be 1)',
+    ACCOUNT_CLOSE_COUNT NUMBER(10,0) COMMENT 'Number of ACCOUNT_CLOSE events',
+    ACCOUNT_UPGRADE_COUNT NUMBER(10,0) COMMENT 'Number of ACCOUNT_UPGRADE events',
+    ACCOUNT_DOWNGRADE_COUNT NUMBER(10,0) COMMENT 'Number of ACCOUNT_DOWNGRADE events',
     ADDRESS_CHANGE_COUNT NUMBER(10,0) COMMENT 'Number of ADDRESS_CHANGE events',
-    CONTACT_UPDATE_COUNT NUMBER(10,0) COMMENT 'Number of CONTACT_UPDATE events',
     EMPLOYMENT_CHANGE_COUNT NUMBER(10,0) COMMENT 'Number of EMPLOYMENT_CHANGE events',
-    RISK_RECLASS_COUNT NUMBER(10,0) COMMENT 'Number of RISK_RECLASSIFICATION events',
-    COMPLIANCE_REVIEW_COUNT NUMBER(10,0) COMMENT 'Number of COMPLIANCE_REVIEW events',
-    KYC_REFRESH_COUNT NUMBER(10,0) COMMENT 'Number of KYC_REFRESH events',
+    REACTIVATION_COUNT NUMBER(10,0) COMMENT 'Number of REACTIVATION events',
+    CHURN_COUNT NUMBER(10,0) COMMENT 'Number of CHURN events',
     HAS_RECENT_ACTIVITY BOOLEAN COMMENT 'TRUE if activity in last 90 days',
     IS_DORMANT_LIFECYCLE BOOLEAN COMMENT 'TRUE if no activity in 180+ days',
     ENGAGEMENT_SCORE NUMBER(5,2) COMMENT 'Lifecycle engagement score (0-100 based on event frequency)',
@@ -365,7 +368,7 @@ CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_LIFECYCLE(
 ) 
 TARGET_LAG = '60 MINUTE' 
 WAREHOUSE = MD_TEST_WH
-COMMENT = 'Customer lifecycle analysis combining master data with lifecycle events for journey tracking, retention analysis, and engagement measurement. Used for churn prediction, customer health scoring, and lifecycle stage identification.'
+COMMENT = 'Customer lifecycle analysis combining master data with lifecycle events for journey tracking, retention analysis, and engagement measurement. Used for churn prediction, customer health scoring, and lifecycle stage identification. Event types: ONBOARDING, ADDRESS_CHANGE, EMPLOYMENT_CHANGE, ACCOUNT_UPGRADE, ACCOUNT_DOWNGRADE, ACCOUNT_CLOSE, REACTIVATION, CHURN.'
 AS
 SELECT 
     c.CUSTOMER_ID,
@@ -379,16 +382,14 @@ SELECT
     MIN(evt.EVENT_DATE) AS FIRST_EVENT_DATE,
     MAX(evt.EVENT_DATE) AS LAST_EVENT_DATE,
     COALESCE(DATEDIFF(day, MAX(evt.EVENT_DATE), CURRENT_DATE()), 9999) AS DAYS_SINCE_LAST_EVENT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'ACCOUNT_OPENED' THEN 1 END) AS ACCOUNT_OPENED_COUNT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'ACCOUNT_CLOSED' THEN 1 END) AS ACCOUNT_CLOSED_COUNT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'TIER_UPGRADE' THEN 1 END) AS TIER_UPGRADE_COUNT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'TIER_DOWNGRADE' THEN 1 END) AS TIER_DOWNGRADE_COUNT,
+    COUNT(CASE WHEN evt.EVENT_TYPE = 'ONBOARDING' THEN 1 END) AS ONBOARDING_COUNT,
+    COUNT(CASE WHEN evt.EVENT_TYPE = 'ACCOUNT_CLOSE' THEN 1 END) AS ACCOUNT_CLOSE_COUNT,
+    COUNT(CASE WHEN evt.EVENT_TYPE = 'ACCOUNT_UPGRADE' THEN 1 END) AS ACCOUNT_UPGRADE_COUNT,
+    COUNT(CASE WHEN evt.EVENT_TYPE = 'ACCOUNT_DOWNGRADE' THEN 1 END) AS ACCOUNT_DOWNGRADE_COUNT,
     COUNT(CASE WHEN evt.EVENT_TYPE = 'ADDRESS_CHANGE' THEN 1 END) AS ADDRESS_CHANGE_COUNT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'CONTACT_UPDATE' THEN 1 END) AS CONTACT_UPDATE_COUNT,
     COUNT(CASE WHEN evt.EVENT_TYPE = 'EMPLOYMENT_CHANGE' THEN 1 END) AS EMPLOYMENT_CHANGE_COUNT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'RISK_RECLASSIFICATION' THEN 1 END) AS RISK_RECLASS_COUNT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'COMPLIANCE_REVIEW' THEN 1 END) AS COMPLIANCE_REVIEW_COUNT,
-    COUNT(CASE WHEN evt.EVENT_TYPE = 'KYC_REFRESH' THEN 1 END) AS KYC_REFRESH_COUNT,
+    COUNT(CASE WHEN evt.EVENT_TYPE = 'REACTIVATION' THEN 1 END) AS REACTIVATION_COUNT,
+    COUNT(CASE WHEN evt.EVENT_TYPE = 'CHURN' THEN 1 END) AS CHURN_COUNT,
     CASE 
         WHEN COALESCE(DATEDIFF(day, MAX(evt.EVENT_DATE), CURRENT_DATE()), 9999) <= 90 
         THEN TRUE 
@@ -408,7 +409,7 @@ SELECT
     END AS ENGAGEMENT_SCORE,
     CURRENT_TIMESTAMP() AS LAST_UPDATED
 FROM CRMA_AGG_DT_CUSTOMER_CURRENT c
-LEFT JOIN CRM_RAW_001.CRMI_RAW_TB_CUSTOMER_EVENTS evt
+LEFT JOIN CRM_RAW_001.CRMI_RAW_TB_CUSTOMER_EVENT evt
     ON c.CUSTOMER_ID = evt.CUSTOMER_ID
 GROUP BY 
     c.CUSTOMER_ID, c.FIRST_NAME, c.FAMILY_NAME, c.FULL_NAME, c.ONBOARDING_DATE
@@ -422,9 +423,6 @@ ORDER BY c.CUSTOMER_ID;
 -- fuzzy matching with accuracy percentage scoring. Used for comprehensive customer 
 -- analysis, compliance screening, and risk assessment across all customer touchpoints 
 -- with quantified match confidence levels for both PEP and sanctions screening.
-
--- Drop existing dynamic table first to ensure clean recreation after structural changes
-DROP DYNAMIC TABLE IF EXISTS CRMA_AGG_DT_CUSTOMER_360;
 
 CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_360(
     CUSTOMER_ID VARCHAR(30) COMMENT 'Unique customer identifier for relationship management',
@@ -529,11 +527,19 @@ CREATE OR REPLACE DYNAMIC TABLE CRMA_AGG_DT_CUSTOMER_360(
     REQUIRES_EXPOSED_PERSON_REVIEW BOOLEAN COMMENT 'Boolean flag indicating if customer requires PEP compliance review',
     REQUIRES_SANCTIONS_REVIEW BOOLEAN COMMENT 'Boolean flag indicating if customer requires sanctions compliance review',
     HIGH_RISK_CUSTOMER BOOLEAN COMMENT 'Boolean flag for customers with both anomalies and PEP/sanctions matches',
+    
+    -- Vulnerability & Legal Capacity Attributes (Phase 3 Enhancement - 2026-01-17 - Retail Loans & Mortgages Module)
+    VULNERABLE_CUSTOMER_FLAG BOOLEAN COMMENT 'Flag indicating customer has vulnerability characteristics requiring special treatment per UK FCA Consumer Duty and EU consumer protection (HEALTH/LIFE_EVENT/FINANCIAL/CAPABILITY)',
+    VULNERABILITY_CATEGORIES VARCHAR(500) COMMENT 'Comma-separated vulnerability types: HEALTH (disability, illness), LIFE_EVENT (bereavement, job loss), FINANCIAL (low income, high debt), CAPABILITY (age, literacy, language barriers). Used for vulnerable customer identification and treatment strategies.',
+    HAS_POWER_OF_ATTORNEY BOOLEAN COMMENT 'Flag indicating customer has appointed Power of Attorney for financial or health decisions. Common for elderly customers (75+) or those with diminished capacity. Critical for loan servicing and forbearance decisions.',
+    POA_HOLDER_NAME VARCHAR(200) COMMENT 'Full name of Power of Attorney holder authorized to make decisions on behalf of customer. NULL if HAS_POWER_OF_ATTORNEY is FALSE. Used for contact routing and legal compliance.',
+    LEGAL_CAPACITY_CONCERNS_FLAG BOOLEAN COMMENT 'Flag indicating potential legal capacity concerns requiring specialist assessment. Used to ensure appropriate protections for customers who may lack capacity to understand loan obligations per Mental Capacity Act (UK) or equivalent.',
+    
     LAST_UPDATED TIMESTAMP_NTZ COMMENT 'Timestamp when customer record was last updated'
 ) 
 TARGET_LAG = '60 MINUTE' 
 WAREHOUSE = MD_TEST_WH
-COMMENT = 'Comprehensive 360-degree customer view with master data, current address, current status, account summary with balances (Phase 1), transaction activity metrics via direct cross-schema join (Phase 2 - Option A), Exposed Person fuzzy matching, and Global Sanctions Data fuzzy matching with accuracy scoring from enhanced screening view (302_CRMA_sanctions_screening.sql). Enables AUM tracking, advisor performance measurement, engagement scoring, churn prediction, and comprehensive compliance screening for holistic customer risk assessment and relationship management.'
+COMMENT = 'Comprehensive 360-degree customer view with master data, current address, current status, account summary with balances (Phase 1), transaction activity metrics via direct cross-schema join (Phase 2 - Option A), Exposed Person fuzzy matching, and Global Sanctions Data fuzzy matching with accuracy scoring from enhanced screening view (302_CRMA_sanctions_screening.sql). Phase 3 adds vulnerability attributes for UK Consumer Duty compliance and retail lending vulnerable customer treatment. Enables AUM tracking, advisor performance measurement, engagement scoring, churn prediction, comprehensive compliance screening, and vulnerable customer identification for holistic customer risk assessment and relationship management.'
 AS
 SELECT 
     -- Customer Master Data
@@ -787,6 +793,61 @@ SELECT
         WHEN c.HAS_ANOMALY = TRUE AND (pep_exact.EXPOSED_PERSON_ID IS NOT NULL OR pep_fuzzy.EXPOSED_PERSON_ID IS NOT NULL OR sanctions.ENTITY_ID IS NOT NULL) THEN TRUE
         ELSE FALSE
     END AS HIGH_RISK_CUSTOMER,
+    
+    -- Vulnerability & Legal Capacity Attributes (Phase 3 Enhancement)
+    -- Computed from existing customer attributes using rule-based logic for showcase
+    CASE 
+        WHEN (c.INCOME_RANGE IN ('0-25K', '25K-50K') AND c.CREDIT_SCORE_BAND IN ('POOR', 'FAIR'))
+            OR DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) >= 75
+            OR (DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) BETWEEN 18 AND 25 
+                AND DATEDIFF(month, c.ONBOARDING_DATE, CURRENT_DATE()) <= 6)
+            OR (c.ACCOUNT_TIER IN ('BASIC', 'STANDARD') AND c.RISK_CLASSIFICATION IN ('HIGH', 'CRITICAL'))
+        THEN TRUE
+        ELSE FALSE
+    END AS VULNERABLE_CUSTOMER_FLAG,
+    
+    CASE 
+        WHEN DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) >= 75 THEN 'CAPABILITY'
+        WHEN DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) BETWEEN 18 AND 25 
+             AND DATEDIFF(month, c.ONBOARDING_DATE, CURRENT_DATE()) <= 6 THEN 'CAPABILITY,FINANCIAL'
+        WHEN c.INCOME_RANGE IN ('0-25K', '25K-50K') 
+             AND c.CREDIT_SCORE_BAND IN ('POOR', 'FAIR') THEN 'FINANCIAL'
+        WHEN c.ACCOUNT_TIER IN ('BASIC', 'STANDARD') 
+             AND c.RISK_CLASSIFICATION IN ('HIGH', 'CRITICAL') THEN 'LIFE_EVENT,FINANCIAL'
+        WHEN (c.INCOME_RANGE IN ('0-25K', '25K-50K') AND c.CREDIT_SCORE_BAND IN ('POOR', 'FAIR'))
+            OR DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) >= 75
+            OR (DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) BETWEEN 18 AND 25 
+                AND DATEDIFF(month, c.ONBOARDING_DATE, CURRENT_DATE()) <= 6)
+            OR (c.ACCOUNT_TIER IN ('BASIC', 'STANDARD') AND c.RISK_CLASSIFICATION IN ('HIGH', 'CRITICAL'))
+        THEN 'FINANCIAL'
+        ELSE NULL
+    END AS VULNERABILITY_CATEGORIES,
+    
+    CASE 
+        WHEN DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) >= 80 
+             AND MOD(ABS(HASH(c.CUSTOMER_ID)), 100) < 30  -- Deterministic 30% based on customer ID
+        THEN TRUE
+        ELSE FALSE
+    END AS HAS_POWER_OF_ATTORNEY,
+    
+    CASE 
+        WHEN DATEDIFF(year, c.DATE_OF_BIRTH, CURRENT_DATE()) >= 80 
+             AND MOD(ABS(HASH(c.CUSTOMER_ID)), 100) < 30
+        THEN CONCAT(
+            CASE MOD(ABS(HASH(c.CUSTOMER_ID)), 5)
+                WHEN 0 THEN 'Sarah'
+                WHEN 1 THEN 'Michael'
+                WHEN 2 THEN 'Emily'
+                WHEN 3 THEN 'David'
+                ELSE 'Jennifer'
+            END,
+            ' ',
+            c.FAMILY_NAME
+        )
+        ELSE NULL
+    END AS POA_HOLDER_NAME,
+    
+    FALSE AS LEGAL_CAPACITY_CONCERNS_FLAG,
     
     -- Metadata
     CURRENT_TIMESTAMP() AS LAST_UPDATED

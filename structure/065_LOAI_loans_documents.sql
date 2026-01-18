@@ -1,335 +1,531 @@
 -- ============================================================
--- LOA_RAW_001 Schema - Loan & Document Processing (Raw Data Layer)
--- Generated on: 2025-10-04
+-- LOA_RAW_001 Schema -  Loan DocAI Processing
+-- Updated: 2026-01-18
 -- ============================================================
 --
 -- OVERVIEW:
--- This schema provides the foundational raw data layer for loan applications,
--- mortgage documentation, and related document processing. It handles the ingestion
--- and storage of email communications and PDF documents for downstream processing
--- and business intelligence using DocAI capabilities.
+-- Simplified DocAI pipeline for extracting loan application data from mortgage emails.
+-- Uses direct file-to-AI_EXTRACT approach with 2-stage processing.
 --
 -- BUSINESS PURPOSE:
--- - Document ingestion for loan applications and mortgage processing
--- - Email communication tracking and analysis
--- - PDF document storage for contract analysis and compliance
--- - Foundation for downstream loan processing, risk assessment, and analytics
--- - Support for document intelligence and automated content extraction
+-- - Extract structured loan data from mortgage emails using Snowflake Cortex AI
+-- - Automated, event-driven processing with minimal latency
+-- - Foundation for loan origination and underwriting workflows
 --
--- SUPPORTED DOCUMENT TYPES:
--- - Email Files: Customer inquiries, loan applications, internal communications
--- - PDF Documents: Loan agreements, mortgage contracts, financial statements
--- - Future extensibility for additional document types and formats
+-- SIMPLIFIED ARCHITECTURE (Event-Driven):
+-- 1. Files arrive → LOAI_RAW_STAGE_EMAIL_INBOUND
+-- 2. Stream detects files → LOAI_RAW_STREAM_EMAIL_FILES
+-- 3. Task extracts data → LOAI_RAW_TASK_EXTRACT_MAIL_DATA (AI_EXTRACT)
+-- 4. Stores raw JSON → LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT
+-- 5. Task flattens data → LOAI_RAW_TASK_FLAT_MAIL_DATA (runs AFTER extraction task)
+-- 6. Stores typed columns → LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT_FLAT
 --
 -- OBJECTS CREATED:
 -- ┌─ STAGES (2):
--- │  ├─ LOAI_RAW_STAGE_EMAIL_INBOUND     - Email files for DocAI processing
--- │  └─ LOAI_RAW_STAGE_PDF_INBOUND       - PDF documents for DocAI processing
+-- │  ├─ LOAI_RAW_STAGE_EMAIL_INBOUND     - Email files (.txt, .eml, .msg)
+-- │  └─ LOAI_RAW_STAGE_PDF_INBOUND       - PDF documents
 -- │
--- ├─ TABLES (2):
--- │  ├─ LOAI_RAW_TB_EMAILS            - Raw email storage with metadata
--- │  └─ LOAI_RAW_TB_DOCUMENTS         - Raw PDF document storage with metadata
+-- ├─ TABLES (6):
+-- │  ├─ Schema Config (1):
+-- │  │  └─ LOAI_RAW_TB_EMAIL_INBOUND_LOAN_SCHEMA_CONFIG - AI_EXTRACT schema definition (15 fields)
+-- │  │
+-- │  ├─ Reference Data (3):
+-- │  │  ├─ LOAI_REF_TB_PRODUCT_CATALOGUE        - Loan products (8 products)
+-- │  │  ├─ LOAI_REF_TB_COUNTRY_REGIME_CONFIG    - Regulatory parameters (CH/UK/DE)
+-- │  │  └─ LOAI_REF_TB_APPLICATION_STATUS       - Application status codes (12 statuses)
+-- │  │
+-- │  └─ DocAI Extraction (2):
+-- │     ├─ LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT       - Raw AI_EXTRACT output (JSON)
+-- │     └─ LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT_FLAT  - Flattened typed columns (15 fields)
 -- │
--- ├─ STREAMS (2):
--- │  ├─ LOAI_RAW_STREAM_EMAIL_FILES    - Email file arrival detection
--- │  └─ LOAI_RAW_STREAM_PDF_FILES      - PDF file arrival detection
+-- ├─ STREAMS (1 - Event-Driven Trigger):
+-- │  └─ LOAI_RAW_STREAM_EMAIL_FILES    - Detects new files on stage → triggers extraction
 -- │
--- ├─ STORED PROCEDURES (1):
--- │  └─ LOAI_CLEANUP_STAGE_KEEP_LAST_N  - Generic stage cleanup utility
--- │
--- └─ TASKS (4 - All Serverless: 2 load + 2 cleanup):
---    ├─ LOAI_RAW_TASK_LOAD_EMAILS      - Automated email ingestion
---    ├─ LOAI_RAW_TASK_LOAD_DOCUMENTS   - Automated PDF ingestion
---    ├─ LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS     - Stage cleanup
---    └─ LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS  - Stage cleanup
+-- └─ TASKS (2 - All Serverless):
+--    ├─ LOAI_RAW_TASK_EXTRACT_MAIL_DATA - Root task (60 min schedule + stream trigger)
+--    └─ LOAI_RAW_TASK_FLAT_MAIL_DATA    - Child task (runs AFTER extraction task completes)
 --
--- DATA ARCHITECTURE:
--- Email files → LOAI_RAW_STAGE_EMAIL_INBOUND → Stream Detection → Automated Task → Raw Table → DocAI Processing
--- PDF documents → LOAI_RAW_STAGE_PDF_INBOUND → Stream Detection → Automated Task → Raw Table → DocAI Processing
---
--- PROCESSING PATTERNS:
--- - Email Files: *.eml, *.msg, *.mbox for DocAI content extraction
--- - PDF Documents: *.pdf for DocAI intelligent document analysis
--- - Metadata capture (filename, load timestamp) for data lineage and audit
--- - Error handling with ON_ERROR = CONTINUE for resilient processing
--- - Stream-based triggering for near real-time processing efficiency
--- - DocAI integration for automated document intelligence and content extraction
---
--- RELATED SCHEMAS:
--- - LOA_AGG_v001: Loan analytics and business logic transformation
--- - REP_AGG_001: Analytics and reporting data products
--- - CRM_RAW_001: Customer data for loan applicant identification
 -- ============================================================
 
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
 USE SCHEMA LOA_RAW_001;
 
 -- ============================================================
--- INTERNAL STAGES - Document Landing Areas
+-- INTERNAL STAGES
 -- ============================================================
--- Secure internal stages for loan-related document ingestion with
--- directory listing enabled for automated file discovery and DocAI integration.
 
--- Stage for inbound email files (DocAI processing)
 CREATE STAGE IF NOT EXISTS LOAI_RAW_STAGE_EMAIL_INBOUND
     ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
     )
-    COMMENT = 'Staging area for loan-related email files awaiting DocAI processing and analysis. Supports various email formats (.eml, .msg, .mbox) for document intelligence extraction, content analysis, and automated loan application processing workflows. Directory listing enabled for batch processing and monitoring of email document ingestion.';
+    COMMENT = 'Staging area for mortgage email files (.txt, .eml, .msg) for DocAI processing.';
 
--- Stage for inbound PDF documents (DocAI processing)
 CREATE STAGE IF NOT EXISTS LOAI_RAW_STAGE_PDF_INBOUND
     ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
     DIRECTORY = (
         ENABLE = TRUE
         AUTO_REFRESH = TRUE
     )
-    COMMENT = 'Staging area for loan-related PDF documents awaiting DocAI processing and intelligent document analysis. Handles mortgage applications, loan agreements, contracts, financial statements, and regulatory filings for automated content extraction, classification, and data mining. Directory listing enabled for batch processing and document workflow management.';
+    COMMENT = 'Staging area for loan-related PDF documents for DocAI processing.';
 
 -- ============================================================
--- TABLES - Raw Document Storage
+-- AI_EXTRACT SCHEMA CONFIGURATION
 -- ============================================================
--- Persistent storage for raw loan-related documents with metadata
--- for audit trails, compliance, and downstream processing requirements.
+-- Defines the 15 fields to extract from mortgage emails:
+-- - 1 document classification field
+-- - 14 loan application data fields
+-- ============================================================
+
+CREATE OR REPLACE TABLE LOAI_RAW_TB_EMAIL_INBOUND_LOAN_SCHEMA_CONFIG (
+    schema_json VARIANT COMMENT 'AI_EXTRACT schema definition: {"field_name": "type: description"}'
+) 
+COMMENT = 'Configuration table storing the AI_EXTRACT schema for mortgage email processing. Defines 15 fields to extract using Snowflake Cortex AI.'
+AS
+SELECT PARSE_JSON('{
+    "document_type": "string: classify this email as one of: MORTGAGE_APPLICATION, CUSTOMER_INQUIRY, INTERNAL_REVIEW, LOAN_OFFICER_NOTES, PRE_APPROVAL, OFFER_LETTER, GENERAL_CORRESPONDENCE. Required field.",
+    "customer_name": "string: full name of the mortgage applicant or borrower. Return null if not mentioned.",
+    "property_address": "string: complete property address including street, city, postal code. Return null if not mentioned.",
+    "property_type": "string: type of property such as Single Family Home, Multi-family, Apartment, Condo, Townhouse, Detached House. Return null if not mentioned.",
+    "purchase_price": "number: property purchase price or current market valuation in the local currency. Return only the numeric value without currency symbols. Return null if not mentioned.",
+    "down_payment": "number: down payment amount or deposit being paid by the borrower in the local currency. Return only the numeric value without currency symbols. Return null if not mentioned.",
+    "loan_amount": "number: requested mortgage loan amount in the local currency. Return only the numeric value without currency symbols. Return null if not mentioned.",
+    "loan_term_years": "number: loan term duration in years (e.g., 15, 20, 25, 30). Return null if not mentioned.",
+    "rate_type": "string: interest rate type, either Fixed or Variable (also known as Adjustable or Tracker). Return null if not mentioned.",
+    "monthly_income": "number: applicant total monthly gross income before taxes in the local currency. Return only the numeric value without currency symbols. Return null if not mentioned.",
+    "employment": "string: job title, occupation, or employment type (e.g., Software Engineer, Self-Employed, Government Employee, Teacher). Return null if not mentioned.",
+    "employment_tenure_years": "number: number of years the applicant has been in their current employment or job. Return null if not mentioned.",
+    "credit_score": "number: applicant credit score or credit rating (typically 300-850 range). Return null if not mentioned.",
+    "existing_debts_monthly": "number: total monthly debt obligations including credit cards, car loans, other mortgages, in the local currency. Return only the numeric value without currency symbols. Return 0 if explicitly stated as none, return null if not mentioned.",
+    "country": "string: country where the property is located (e.g., Switzerland, UK, Germany, Portugal, France). Return null if not mentioned."
+}');
 
 -- ============================================================
--- LOAI_RAW_TB_EMAILS TABLE - Raw Email Repository
+-- LOAN REFERENCE TABLES
 -- ============================================================
--- Central repository for all inbound loan-related email communications with
--- comprehensive metadata capture for operational monitoring and compliance.
 
-CREATE OR REPLACE TABLE LOAI_RAW_TB_EMAILS (
-    FILE_NAME   STRING COMMENT 'Original source file name for audit trail, correlation with loan applications, and operational troubleshooting. Enables traceability back to customer communications and case management systems.',
-    LOAD_TS     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP COMMENT 'System ingestion timestamp for data lineage tracking, SLA monitoring, and processing performance analysis. Critical for operational dashboards and customer service response time tracking.',
-    RAW_CONTENT VARIANT COMMENT 'Complete email content preserved as VARIANT for flexible schema evolution, compliance archival, and comprehensive downstream parsing. Supports all email formats with full fidelity preservation for DocAI processing.'
+-- Table: Loan Product Catalogue
+CREATE OR REPLACE TABLE LOAI_REF_TB_PRODUCT_CATALOGUE (
+    PRODUCT_ID VARCHAR(50) PRIMARY KEY,
+    PRODUCT_NAME VARCHAR(200) NOT NULL,
+    PRODUCT_TYPE VARCHAR(50) NOT NULL,
+    COUNTRY VARCHAR(3) NOT NULL,
+    IS_SECURED BOOLEAN NOT NULL,
+    MIN_LOAN_AMOUNT NUMBER(18,2),
+    MAX_LOAN_AMOUNT NUMBER(18,2),
+    MIN_TERM_MONTHS INT,
+    MAX_TERM_MONTHS INT,
+    DEFAULT_INTEREST_RATE NUMBER(5,4),
+    RATE_TYPE VARCHAR(20),
+    MAX_LTV_PCT NUMBER(5,2),
+    ELIGIBILITY_CRITERIA VARCHAR(1000),
+    REGULATORY_CLASSIFICATION VARCHAR(100),
+    IS_ACTIVE BOOLEAN DEFAULT TRUE,
+    PRODUCT_LAUNCH_DATE DATE,
+    PRODUCT_DISCONTINUATION_DATE DATE,
+    INSERT_TIMESTAMP_UTC TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 )
-COMMENT = 'Master repository for raw loan-related email communications supporting mortgage and loan application processing. Stores customer inquiries, application submissions, internal communications, and loan officer correspondence. Provides foundation for downstream DocAI processing, customer service analytics, compliance analysis, and audit trail maintenance. Optimized for document intelligence workflows with comprehensive metadata capture.';
+COMMENT = 'Loan product catalogue for retail mortgages and loans across EMEA markets.';
 
--- ============================================================
--- LOAI_RAW_TB_DOCUMENTS TABLE - Raw PDF Document Repository
--- ============================================================
--- Central repository for all inbound loan-related PDF documents with
--- comprehensive metadata capture for operational monitoring and compliance.
+-- Insert sample products
+INSERT INTO LOAI_REF_TB_PRODUCT_CATALOGUE (
+    PRODUCT_ID, PRODUCT_NAME, PRODUCT_TYPE, COUNTRY, IS_SECURED, 
+    MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT, MIN_TERM_MONTHS, MAX_TERM_MONTHS, 
+    DEFAULT_INTEREST_RATE, RATE_TYPE, MAX_LTV_PCT, REGULATORY_CLASSIFICATION, 
+    IS_ACTIVE, PRODUCT_LAUNCH_DATE
+) VALUES
+    ('CH_FIXED_MORTGAGE_25Y', 'Swiss Fixed Rate Mortgage (25Y)', 'MORTGAGE', 'CHE', TRUE, 100000, 2000000, 120, 300, 0.0250, 'FIXED', 80.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2023-01-01'),
+    ('CH_SARON_MORTGAGE', 'Swiss SARON Variable Mortgage', 'MORTGAGE', 'CHE', TRUE, 100000, 2000000, 120, 300, 0.0180, 'VARIABLE', 80.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2023-06-01'),
+    ('CH_BUY_TO_LET_MORTGAGE', 'Swiss Buy-to-Let Mortgage', 'MORTGAGE', 'CHE', TRUE, 200000, 3000000, 120, 300, 0.0300, 'FIXED', 75.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2023-01-01'),
+    ('UK_FIXED_MORTGAGE_30Y', 'UK Fixed Rate Mortgage (30Y)', 'MORTGAGE', 'GBR', TRUE, 80000, 1500000, 120, 360, 0.0450, 'FIXED', 90.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2023-01-01'),
+    ('UK_TRACKER_MORTGAGE', 'UK Base Rate Tracker Mortgage', 'MORTGAGE', 'GBR', TRUE, 80000, 1500000, 120, 360, 0.0400, 'TRACKER', 90.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2023-01-01'),
+    ('UK_GREEN_MORTGAGE', 'UK Green Mortgage (EPC A-C)', 'MORTGAGE', 'GBR', TRUE, 100000, 2000000, 120, 360, 0.0380, 'FIXED', 90.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2024-01-01'),
+    ('DE_FIXED_MORTGAGE_20Y', 'German Fixed Rate Mortgage (20Y)', 'MORTGAGE', 'DEU', TRUE, 120000, 1800000, 60, 240, 0.0350, 'FIXED', 80.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2023-01-01'),
+    ('DE_KFW_GREEN_MORTGAGE', 'German KfW Energy Efficient Mortgage', 'MORTGAGE', 'DEU', TRUE, 100000, 1500000, 60, 300, 0.0200, 'FIXED', 80.00, 'RESIDENTIAL_MORTGAGE', TRUE, '2023-06-01');
 
-CREATE OR REPLACE TABLE LOAI_RAW_TB_DOCUMENTS (
-    FILE_NAME   STRING COMMENT 'Original source file name for audit trail, correlation with loan applications, and document management. Enables traceability back to source systems and document version control.',
-    LOAD_TS     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP COMMENT 'System ingestion timestamp for data lineage tracking, SLA monitoring, and processing performance analysis. Critical for operational dashboards and regulatory reporting timelines.',
-    RAW_CONTENT VARIANT COMMENT 'Complete PDF document content preserved as VARIANT for flexible schema evolution, compliance archival, and comprehensive downstream parsing. Supports DocAI intelligent document processing with full content preservation.'
+-- Table: Country-Regime Configuration
+CREATE OR REPLACE TABLE LOAI_REF_TB_COUNTRY_REGIME_CONFIG (
+    COUNTRY_CODE VARCHAR(3) PRIMARY KEY,
+    COUNTRY_NAME VARCHAR(100) NOT NULL,
+    CURRENCY_CODE VARCHAR(3) NOT NULL,
+    MAX_LTV_OWNER_OCCUPIED NUMBER(5,2),
+    MAX_LTV_BUY_TO_LET NUMBER(5,2),
+    MIN_HARD_EQUITY_PCT NUMBER(5,2),
+    AFFORDABILITY_IMPUTED_RATE NUMBER(5,4),
+    AFFORDABILITY_DTI_THRESHOLD NUMBER(5,2),
+    AFFORDABILITY_DSTI_THRESHOLD NUMBER(5,2),
+    ANCILLARY_COSTS_PCT NUMBER(5,4),
+    COOLING_OFF_PERIOD_DAYS INT,
+    AMORTIZATION_REQUIRED_LTV NUMBER(5,2),
+    AMORTIZATION_PERIOD_YEARS INT,
+    REQUIRES_VALUATION_APPRAISAL BOOLEAN,
+    ALLOWS_FOREIGN_CURRENCY_LOANS BOOLEAN,
+    REGULATORY_BODY VARCHAR(200),
+    CONSUMER_DUTY_APPLIES BOOLEAN DEFAULT FALSE,
+    INSERT_TIMESTAMP_UTC TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 )
-COMMENT = 'Master repository for raw loan-related PDF documents supporting mortgage and loan application processing. Stores loan agreements, mortgage contracts, financial statements, credit reports, and regulatory filings. Provides foundation for downstream DocAI processing, automated data extraction, compliance analysis, and audit trail maintenance. Optimized for intelligent document analysis workflows with comprehensive metadata capture.';
+COMMENT = 'Country-specific regulatory parameters for mortgage lending (CH/UK/DE).';
+
+INSERT INTO LOAI_REF_TB_COUNTRY_REGIME_CONFIG (
+    COUNTRY_CODE, COUNTRY_NAME, CURRENCY_CODE, 
+    MAX_LTV_OWNER_OCCUPIED, MAX_LTV_BUY_TO_LET, MIN_HARD_EQUITY_PCT,
+    AFFORDABILITY_IMPUTED_RATE, AFFORDABILITY_DTI_THRESHOLD, AFFORDABILITY_DSTI_THRESHOLD, ANCILLARY_COSTS_PCT,
+    COOLING_OFF_PERIOD_DAYS, AMORTIZATION_REQUIRED_LTV, AMORTIZATION_PERIOD_YEARS,
+    REQUIRES_VALUATION_APPRAISAL, ALLOWS_FOREIGN_CURRENCY_LOANS,
+    REGULATORY_BODY, CONSUMER_DUTY_APPLIES
+) VALUES
+    ('CHE', 'Switzerland', 'CHF', 80.00, 75.00, 10.00, 0.0500, 33.00, 33.00, 0.0100, 14, 66.67, 15, TRUE, FALSE, 'FINMA', FALSE),
+    ('GBR', 'United Kingdom', 'GBP', 90.00, 80.00, 0.00, 0.0700, 45.00, 45.00, 0.0000, 0, NULL, NULL, TRUE, FALSE, 'FCA, PRA', TRUE),
+    ('DEU', 'Germany', 'EUR', 80.00, 70.00, 0.00, 0.0450, 40.00, 40.00, 0.0000, 14, NULL, NULL, TRUE, FALSE, 'BaFin', FALSE);
+
+-- Table: Application Status Codes
+CREATE OR REPLACE TABLE LOAI_REF_TB_APPLICATION_STATUS (
+    STATUS_CODE VARCHAR(50) PRIMARY KEY,
+    STATUS_NAME VARCHAR(100) NOT NULL,
+    STATUS_CATEGORY VARCHAR(50),
+    DESCRIPTION VARCHAR(500),
+    IS_FINAL BOOLEAN DEFAULT FALSE,
+    REQUIRES_ACTION BOOLEAN DEFAULT FALSE,
+    DISPLAY_ORDER INT,
+    INSERT_TIMESTAMP_UTC TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+)
+COMMENT = 'Loan application status codes for workflow management.';
+
+INSERT INTO LOAI_REF_TB_APPLICATION_STATUS (STATUS_CODE, STATUS_NAME, STATUS_CATEGORY, DESCRIPTION, IS_FINAL, REQUIRES_ACTION, DISPLAY_ORDER) VALUES
+    ('DRAFT', 'Draft', 'PENDING', 'Application started but not yet submitted', FALSE, TRUE, 1),
+    ('SUBMITTED', 'Submitted', 'PENDING', 'Application submitted and awaiting review', FALSE, FALSE, 2),
+    ('KYC_PENDING', 'KYC Pending', 'PENDING', 'Pending KYC verification', FALSE, TRUE, 3),
+    ('UNDER_REVIEW', 'Under Review', 'PENDING', 'Under credit assessment', FALSE, FALSE, 4),
+    ('APPROVED', 'Approved', 'APPROVED', 'Application approved', FALSE, FALSE, 5),
+    ('OFFER_ISSUED', 'Offer Issued', 'APPROVED', 'Formal offer issued', FALSE, TRUE, 6),
+    ('OFFER_ACCEPTED', 'Offer Accepted', 'APPROVED', 'Customer accepted offer', FALSE, FALSE, 7),
+    ('COOLING_OFF', 'Cooling-Off Period', 'PENDING', 'Mandatory cooling-off period', FALSE, FALSE, 8),
+    ('DISBURSED', 'Disbursed', 'DISBURSED', 'Loan disbursed', TRUE, FALSE, 9),
+    ('DECLINED', 'Declined', 'DECLINED', 'Application declined', TRUE, FALSE, 10),
+    ('WITHDRAWN', 'Withdrawn by Applicant', 'WITHDRAWN', 'Customer withdrew application', TRUE, FALSE, 11),
+    ('CANCELLED', 'Cancelled by Bank', 'DECLINED', 'Application cancelled by bank', TRUE, FALSE, 12);
 
 -- ============================================================
--- STREAMS - File Arrival Detection
+-- DOCAI EXTRACTION TABLES (SIMPLIFIED 2-STAGE PIPELINE)
 -- ============================================================
--- Change data capture streams for automated detection of new document
--- arrivals, enabling near real-time processing and operational efficiency.
 
--- Stream to detect new email files arriving on the stage
+-- STAGE 1: Raw AI_EXTRACT Output
+CREATE OR REPLACE TABLE LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT (
+    FILE_NAME STRING COMMENT 'Source filename from stage',
+    FILE_TIMESTAMP TIMESTAMP_NTZ COMMENT 'File last modified timestamp',
+    EXTRACTED_DATA VARIANT COMMENT 'Raw AI_EXTRACT JSON output: {error: null, response: {...}}',
+    EXTRACTION_TIMESTAMP TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP() COMMENT 'When AI_EXTRACT was performed'
+)
+COMMENT = 'Raw AI_EXTRACT output from mortgage emails. Contains unflattened JSON with all 15 extracted fields.';
+
+-- STAGE 2: Flattened Typed Columns
+CREATE OR REPLACE TABLE LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT_FLAT (
+    FILE_NAME STRING COMMENT 'Source filename',
+    FILE_TIMESTAMP TIMESTAMP_NTZ COMMENT 'File timestamp',
+    EXTRACTION_TIMESTAMP TIMESTAMP_NTZ COMMENT 'Extraction timestamp',
+    
+    -- Document classification
+    DOCUMENT_TYPE STRING COMMENT 'AI-classified document type',
+    
+    -- Applicant information
+    CUSTOMER_NAME STRING COMMENT 'Applicant name',
+    EMPLOYMENT STRING COMMENT 'Job title',
+    EMPLOYMENT_TENURE_YEARS INT COMMENT 'Years in current employment',
+    MONTHLY_INCOME NUMBER(18,2) COMMENT 'Monthly gross income',
+    EXISTING_DEBTS_MONTHLY NUMBER(18,2) COMMENT 'Monthly debt obligations',
+    CREDIT_SCORE INT COMMENT 'Credit score',
+    
+    -- Property information
+    PROPERTY_ADDRESS STRING COMMENT 'Property address',
+    PROPERTY_TYPE STRING COMMENT 'Property type',
+    PURCHASE_PRICE NUMBER(18,2) COMMENT 'Property purchase price',
+    
+    -- Loan request
+    LOAN_AMOUNT NUMBER(18,2) COMMENT 'Requested loan amount',
+    DOWN_PAYMENT NUMBER(18,2) COMMENT 'Down payment',
+    LOAN_TERM_YEARS INT COMMENT 'Loan term in years',
+    RATE_TYPE STRING COMMENT 'Interest rate type (Fixed/Variable)',
+    
+    -- Geographic
+    COUNTRY STRING COMMENT 'Country',
+    
+    -- Calculated metrics
+    LTV_RATIO_PCT NUMBER(5,2) COMMENT 'Loan-to-Value ratio percentage',
+    DTI_RATIO_PCT NUMBER(5,2) COMMENT 'Debt-to-Income ratio percentage',
+    
+    -- Metadata
+    EXTRACTION_SUCCESS BOOLEAN COMMENT 'TRUE if extraction successful',
+    RAW_EXTRACTED_DATA VARIANT COMMENT 'Complete raw JSON for debugging'
+)
+COMMENT = 'Flattened loan data with typed columns from AI_EXTRACT. Ready for business logic and reporting.';
+
+-- ============================================================
+-- NOTE: Core Loan Business Entities Moved to AGG Schema
+-- ============================================================
+-- 
+-- The following tables have been moved to structure/465_LOAA_loans_applications.sql
+-- in the LOA_AGG_001 schema (proper layering for business entities):
+--
+-- • LOAA_AGG_TB_APPLICATIONS              (Loan applications master)
+-- • LOAA_AGG_TB_COLLATERAL                (Property collateral master)
+-- • LOAA_AGG_TB_LOAN_COLLATERAL_LINK      (Loan-to-collateral M:M mapping)
+-- • LOAA_AGG_TB_AFFORDABILITY_ASSESSMENTS (Affordability calculations)
+--
+-- These tables are populated by populate_loan_tables_from_docai.sql
+-- from the flattened DocAI extraction data below.
+--
+-- ============================================================
+
+-- ============================================================
+-- STREAMS FOR CHANGE DETECTION
+-- ============================================================
+
+-- Stream to detect new files arriving on the stage
 CREATE OR REPLACE STREAM LOAI_RAW_STREAM_EMAIL_FILES
 ON STAGE LOAI_RAW_STAGE_EMAIL_INBOUND
-COMMENT = 'Change data capture stream for automated detection of new email files arriving on the inbound stage. Triggers downstream processing tasks for near real-time document ingestion and DocAI analysis. Essential for operational SLA compliance and timely loan application processing.';
-
--- Stream to detect new PDF files arriving on the stage
-CREATE OR REPLACE STREAM LOAI_RAW_STREAM_PDF_FILES
-ON STAGE LOAI_RAW_STAGE_PDF_INBOUND
-COMMENT = 'Change data capture stream for automated detection of new PDF documents arriving on the inbound stage. Triggers downstream processing tasks for near real-time document ingestion and DocAI intelligent analysis. Essential for operational SLA compliance and timely loan document processing.';
+COMMENT = 'Stream to detect new email files arriving on the stage. Triggers LOAI_RAW_TASK_EXTRACT_MAIL_DATA when new .txt files are uploaded.';
 
 -- ============================================================
--- TASKS - Automated Document Processing
+-- TASK 1: EXTRACT FROM STAGE FILES USING AI_EXTRACT
 -- ============================================================
--- Scheduled tasks for automated document ingestion with stream-based
--- triggering for efficient resource utilization and near real-time processing.
+-- Event-driven task triggered when new files arrive on stage
+-- Runs every 60 minutes ONLY when stream has data (new files uploaded)
+-- Extracts 15 fields using Snowflake Cortex AI_EXTRACT
+-- Stores raw JSON output in LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT
+-- ============================================================
 
--- Task to automatically load new email files
-CREATE OR REPLACE TASK LOAI_RAW_TASK_LOAD_EMAILS
-    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+CREATE OR REPLACE TASK LOAI_RAW_TASK_EXTRACT_MAIL_DATA
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'SMALL'
     SCHEDULE = '60 MINUTE'
     WHEN SYSTEM$STREAM_HAS_DATA('LOAI_RAW_STREAM_EMAIL_FILES')
-    -- Automated email ingestion task with stream-based triggering for efficient
-    -- processing of loan-related communications. Executes every 60 minutes with
-    -- serverless compute and conditional execution based on file arrival detection.
 AS
-    COPY INTO LOAI_RAW_TB_EMAILS (FILE_NAME, RAW_CONTENT)
-    FROM (
-        SELECT 
-            METADATA$FILENAME AS FILE_NAME,          -- Capture original filename for audit trail
-            TO_VARIANT($1) AS RAW_CONTENT            -- Store content as VARIANT for flexible processing
-        FROM @LOAI_RAW_STAGE_EMAIL_INBOUND
-    )
-    PATTERN = '.*\.(eml|msg|mbox)'                   -- Process common email file formats
-    ON_ERROR = CONTINUE;                             -- Continue processing on individual file errors for resilience
-
--- Task to automatically load new PDF documents
-CREATE OR REPLACE TASK LOAI_RAW_TASK_LOAD_DOCUMENTS
-    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
-    SCHEDULE = '60 MINUTE'
-    WHEN SYSTEM$STREAM_HAS_DATA('LOAI_RAW_STREAM_PDF_FILES')
-    -- Automated PDF document ingestion task with stream-based triggering for
-    -- efficient processing of loan-related documents. Executes every 60 minutes
-    -- with serverless compute and conditional execution based on file arrival detection.
-AS
-    COPY INTO LOAI_RAW_TB_DOCUMENTS (FILE_NAME, RAW_CONTENT)
-    FROM (
-        SELECT 
-            METADATA$FILENAME AS FILE_NAME,          -- Capture original filename for audit trail
-            TO_VARIANT($1) AS RAW_CONTENT            -- Store content as VARIANT for DocAI processing
-        FROM @LOAI_RAW_STAGE_PDF_INBOUND
-    )
-    PATTERN = '.*\.pdf'                              -- Process PDF documents
-    ON_ERROR = CONTINUE;                             -- Continue processing on individual file errors for resilience
-
--- ============================================================
--- MAINTENANCE PROCEDURES
--- ============================================================
--- Utility stored procedures for schema maintenance and operations.
-
--- ------------------------------------------------------------
--- LOAI_CLEANUP_STAGE_KEEP_LAST_N - Generic Stage Cleanup Procedure
--- ------------------------------------------------------------
--- Removes oldest files from any stage in LOA_RAW_001 schema, keeping only
--- the N most recently modified files. Useful for managing stage storage
--- costs and implementing data retention policies.
---
--- Parameters:
---   STAGE_NAME: Stage name without @ prefix (e.g., 'LOAI_RAW_STAGE_EMAIL_INBOUND')
---   KEEP_N: Number of most recent files to retain
---
--- Returns: Summary string with deletion statistics
---
--- Usage Examples:
---   CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_EMAIL_INBOUND', 5);
---   CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_PDF_INBOUND', 5);
-
-CREATE OR REPLACE PROCEDURE LOAI_CLEANUP_STAGE_KEEP_LAST_N (
-    STAGE_NAME STRING,
-    KEEP_N     NUMBER
+INSERT INTO LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT (
+    FILE_NAME,
+    FILE_TIMESTAMP,
+    EXTRACTED_DATA,
+    EXTRACTION_TIMESTAMP
 )
-RETURNS STRING
-LANGUAGE SQL
-COMMENT = 'Generic stage cleanup utility for LOA_RAW_001 schema. Removes oldest files from a stage, keeping only the N most recently modified files.'
-EXECUTE AS CALLER
-AS
-$$
-DECLARE
-  V_DELETED NUMBER := 0;
-  V_FAILED  NUMBER := 0;
-  V_REL     STRING;
-  V_CMD     STRING;
-  V_QUERY   STRING;
-  
-  C1 CURSOR FOR
-    SELECT RELATIVE_PATH
-    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
-    
-BEGIN
-  V_QUERY := 'SELECT RELATIVE_PATH FROM DIRECTORY(@' || STAGE_NAME || ') ' ||
-             'QUALIFY ROW_NUMBER() OVER (ORDER BY LAST_MODIFIED DESC) > ' || KEEP_N;
-  
-  EXECUTE IMMEDIATE V_QUERY;
-
-  OPEN C1;
-  FOR RECORD IN C1 DO
-    V_REL := RECORD.RELATIVE_PATH;
-    V_CMD := 'REMOVE @' || STAGE_NAME || '/' || V_REL;
-    
-    BEGIN
-      EXECUTE IMMEDIATE V_CMD;
-      V_DELETED := V_DELETED + 1;
-    EXCEPTION
-      WHEN OTHER THEN
-        V_FAILED := V_FAILED + 1;
-    END;
-  END FOR;
-  CLOSE C1;
-
-  RETURN 'Stage cleanup completed. Deleted: ' || V_DELETED || ' files, Failed: ' || V_FAILED || ' files, Kept: ' || KEEP_N || ' most recent files.';
-END;
-$$;
+SELECT 
+    RELATIVE_PATH AS FILE_NAME,
+    LAST_MODIFIED::TIMESTAMP_NTZ AS FILE_TIMESTAMP,  -- Convert from TIMESTAMP_TZ to TIMESTAMP_NTZ
+    SNOWFLAKE.CORTEX.AI_EXTRACT(
+        TO_FILE('@LOAI_RAW_STAGE_EMAIL_INBOUND', RELATIVE_PATH),
+        (SELECT schema_json FROM LOAI_RAW_TB_EMAIL_INBOUND_LOAN_SCHEMA_CONFIG)
+    ) AS EXTRACTED_DATA,
+    CURRENT_TIMESTAMP() AS EXTRACTION_TIMESTAMP
+FROM DIRECTORY(@LOAI_RAW_STAGE_EMAIL_INBOUND)
+WHERE RELATIVE_PATH LIKE '%mortgage%'
+  AND RELATIVE_PATH LIKE '%_internal.txt'  -- Internal emails contain all required fields
+  -- Idempotency: skip files already extracted
+  AND NOT EXISTS (
+      SELECT 1 FROM LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT e
+      WHERE e.FILE_NAME = RELATIVE_PATH
+  );
 
 -- ============================================================
--- AUTOMATED STAGE CLEANUP TASKS
+-- TASK 2: FLATTEN EXTRACTED DATA TO TYPED COLUMNS
 -- ============================================================
--- Cleanup tasks that run after data loading completes to manage
--- stage storage by keeping only the N most recent files.
+-- Child task that runs automatically AFTER extraction task completes
+-- Triggered ONLY when stream has data (new extractions available)
+-- Flattens AI_EXTRACT JSON to typed columns with calculations
+-- Handles currency formatting (removes EUR/CHF/GBP and commas)
+-- ============================================================
 
--- Cleanup task for email inbound stage
-CREATE OR REPLACE TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS
+CREATE OR REPLACE TASK LOAI_RAW_TASK_FLAT_MAIL_DATA
     USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
-    COMMENT = 'Automated stage cleanup after email data load. Keeps last 5 files to manage storage costs.'
-    AFTER LOAI_RAW_TASK_LOAD_EMAILS
+    AFTER LOAI_RAW_TASK_EXTRACT_MAIL_DATA
 AS
-    CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_EMAIL_INBOUND', 5);
-
--- Cleanup task for PDF documents stage
-CREATE OR REPLACE TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS
-    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
-    COMMENT = 'Automated stage cleanup after PDF document data load. Keeps last 5 files to manage storage costs.'
-    AFTER LOAI_RAW_TASK_LOAD_DOCUMENTS
-AS
-    CALL LOAI_CLEANUP_STAGE_KEEP_LAST_N('LOAI_RAW_STAGE_PDF_INBOUND', 5);
+INSERT INTO LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT_FLAT (
+    FILE_NAME,
+    FILE_TIMESTAMP,
+    EXTRACTION_TIMESTAMP,
+    DOCUMENT_TYPE,
+    CUSTOMER_NAME,
+    EMPLOYMENT,
+    EMPLOYMENT_TENURE_YEARS,
+    MONTHLY_INCOME,
+    EXISTING_DEBTS_MONTHLY,
+    CREDIT_SCORE,
+    PROPERTY_ADDRESS,
+    PROPERTY_TYPE,
+    PURCHASE_PRICE,
+    LOAN_AMOUNT,
+    DOWN_PAYMENT,
+    LOAN_TERM_YEARS,
+    RATE_TYPE,
+    COUNTRY,
+    LTV_RATIO_PCT,
+    DTI_RATIO_PCT,
+    EXTRACTION_SUCCESS,
+    RAW_EXTRACTED_DATA
+)
+SELECT 
+    s.FILE_NAME,
+    s.FILE_TIMESTAMP,
+    s.EXTRACTION_TIMESTAMP,
+    
+    -- Document classification (nested under 'response')
+    s.EXTRACTED_DATA:response:document_type::STRING AS DOCUMENT_TYPE,
+    
+    -- Applicant information (convert "None" strings to NULL)
+    NULLIF(s.EXTRACTED_DATA:response:customer_name::STRING, 'None') AS CUSTOMER_NAME,
+    NULLIF(s.EXTRACTED_DATA:response:employment::STRING, 'None') AS EMPLOYMENT,
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:employment_tenure_years::STRING = 'None' THEN NULL
+        ELSE TRY_TO_NUMBER(s.EXTRACTED_DATA:response:employment_tenure_years::STRING)
+    END AS EMPLOYMENT_TENURE_YEARS,
+    
+    -- Financial fields - handle "None" strings and remove currency codes/commas before converting to NUMBER
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:monthly_income::STRING IN ('None', 'null') THEN NULL
+        ELSE TRY_TO_NUMBER(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(s.EXTRACTED_DATA:response:monthly_income::STRING, '[A-Z]{3}', ''),
+                '[,\\s]', ''
+            )
+        )
+    END AS MONTHLY_INCOME,
+    
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:existing_debts_monthly::STRING IN ('None', 'null') THEN NULL
+        ELSE TRY_TO_NUMBER(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(s.EXTRACTED_DATA:response:existing_debts_monthly::STRING, '[A-Z]{3}', ''),
+                '[,\\s]', ''
+            )
+        )
+    END AS EXISTING_DEBTS_MONTHLY,
+    
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:credit_score::STRING IN ('None', 'null') THEN NULL
+        ELSE TRY_TO_NUMBER(s.EXTRACTED_DATA:response:credit_score::STRING)
+    END AS CREDIT_SCORE,
+    
+    -- Property information (convert "None" strings to NULL)
+    NULLIF(s.EXTRACTED_DATA:response:property_address::STRING, 'None') AS PROPERTY_ADDRESS,
+    NULLIF(s.EXTRACTED_DATA:response:property_type::STRING, 'None') AS PROPERTY_TYPE,
+    
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:purchase_price::STRING IN ('None', 'null') THEN NULL
+        ELSE TRY_TO_NUMBER(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(s.EXTRACTED_DATA:response:purchase_price::STRING, '[A-Z]{3}', ''),
+                '[,\\s]', ''
+            )
+        )
+    END AS PURCHASE_PRICE,
+    
+    -- Loan request details
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:loan_amount::STRING IN ('None', 'null') THEN NULL
+        ELSE TRY_TO_NUMBER(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(s.EXTRACTED_DATA:response:loan_amount::STRING, '[A-Z]{3}', ''),
+                '[,\\s]', ''
+            )
+        )
+    END AS LOAN_AMOUNT,
+    
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:down_payment::STRING IN ('None', 'null') THEN NULL
+        ELSE TRY_TO_NUMBER(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(s.EXTRACTED_DATA:response:down_payment::STRING, '[A-Z]{3}', ''),
+                '[,\\s]', ''
+            )
+        )
+    END AS DOWN_PAYMENT,
+    
+    CASE 
+        WHEN s.EXTRACTED_DATA:response:loan_term_years::STRING = 'None' THEN NULL
+        ELSE TRY_TO_NUMBER(s.EXTRACTED_DATA:response:loan_term_years::STRING)
+    END AS LOAN_TERM_YEARS,
+    NULLIF(s.EXTRACTED_DATA:response:rate_type::STRING, 'None') AS RATE_TYPE,
+    
+    -- Geographic information (convert "None" strings to NULL)
+    NULLIF(s.EXTRACTED_DATA:response:country::STRING, 'None') AS COUNTRY,
+    
+    -- Calculated LTV ratio
+    CASE 
+        WHEN TRY_TO_NUMBER(REGEXP_REPLACE(REGEXP_REPLACE(s.EXTRACTED_DATA:response:purchase_price::STRING, '[A-Z]{3}', ''), '[,\\s]', '')) > 0 
+        THEN ROUND(
+            (TRY_TO_NUMBER(REGEXP_REPLACE(REGEXP_REPLACE(s.EXTRACTED_DATA:response:loan_amount::STRING, '[A-Z]{3}', ''), '[,\\s]', '')) 
+             / TRY_TO_NUMBER(REGEXP_REPLACE(REGEXP_REPLACE(s.EXTRACTED_DATA:response:purchase_price::STRING, '[A-Z]{3}', ''), '[,\\s]', ''))) * 100, 
+            2
+        )
+        ELSE NULL 
+    END AS LTV_RATIO_PCT,
+    
+    -- Calculated DTI ratio
+    CASE 
+        WHEN TRY_TO_NUMBER(REGEXP_REPLACE(REGEXP_REPLACE(s.EXTRACTED_DATA:response:monthly_income::STRING, '[A-Z]{3}', ''), '[,\\s]', '')) > 0 
+        THEN ROUND(
+            (TRY_TO_NUMBER(REGEXP_REPLACE(REGEXP_REPLACE(s.EXTRACTED_DATA:response:existing_debts_monthly::STRING, '[A-Z]{3}', ''), '[,\\s]', '')) 
+             / TRY_TO_NUMBER(REGEXP_REPLACE(REGEXP_REPLACE(s.EXTRACTED_DATA:response:monthly_income::STRING, '[A-Z]{3}', ''), '[,\\s]', ''))) * 100, 
+            2
+        )
+        ELSE NULL 
+    END AS DTI_RATIO_PCT,
+    
+    -- Extraction success indicator
+    CASE WHEN s.EXTRACTED_DATA:response IS NOT NULL THEN TRUE ELSE FALSE END AS EXTRACTION_SUCCESS,
+    
+    -- Keep raw JSON for debugging
+    s.EXTRACTED_DATA AS RAW_EXTRACTED_DATA
+    
+FROM LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT s
+WHERE NOT EXISTS (
+      SELECT 1 FROM LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT_FLAT f
+      WHERE f.FILE_NAME = s.FILE_NAME
+        AND f.EXTRACTION_TIMESTAMP = s.EXTRACTION_TIMESTAMP
+  );
 
 -- ============================================================
 -- TASK ACTIVATION
 -- ============================================================
--- Resume all tasks (load tasks must be resumed first, then cleanup tasks)
 
--- Resume child tasks before parent tasks
-ALTER TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_EMAILS RESUME;
-ALTER TASK LOAI_RAW_TASK_LOAD_EMAILS RESUME;
+-- Resume child task first (flattening)
+ALTER TASK LOAI_RAW_TASK_FLAT_MAIL_DATA RESUME;
 
-ALTER TASK LOAI_RAW_TASK_CLEANUP_STAGE_AFTER_LOAD_DOCUMENTS RESUME;
-ALTER TASK LOAI_RAW_TASK_LOAD_DOCUMENTS RESUME;
+-- Resume parent task (extraction)
+ALTER TASK LOAI_RAW_TASK_EXTRACT_MAIL_DATA RESUME;
 
 -- ============================================================
--- SCHEMA COMPLETION STATUS
+-- COMPLETION STATUS
 -- ============================================================
--- ✅ LOA_RAW_001 Schema Deployment Complete
 --
 -- OBJECTS CREATED:
--- • 2 Stages: LOAI_RAW_STAGE_EMAIL_INBOUND (emails), LOAI_RAW_STAGE_PDF_INBOUND (PDFs)
--- • 2 Tables: LOAI_RAW_TB_EMAILS (email repository), LOAI_RAW_TB_DOCUMENTS (PDF repository)
--- • 2 Streams: LOAI_RAW_STREAM_EMAIL_FILES, LOAI_RAW_STREAM_PDF_FILES (file arrival detection)
--- • 2 Tasks: LOAI_RAW_TASK_LOAD_EMAILS, LOAI_RAW_TASK_LOAD_DOCUMENTS (automated ingestion - ACTIVE)
+-- • 2 Stages: EMAIL_INBOUND, PDF_INBOUND
+-- • 6 Tables: 1 schema config, 3 reference, 2 DocAI extraction (business entities in LOA_AGG_001)
+-- • 1 Stream: EMAIL_FILES (stage) - Event-driven trigger for extraction
+-- • 2 Tasks: EXTRACT_MAIL_DATA (root, 60min + stream), FLAT_MAIL_DATA (child, runs AFTER parent)
 --
--- NEXT STEPS:
--- 1. ✅ LOA_RAW_001 schema deployed successfully
--- 2. Upload email files to stage: PUT file://*.eml @LOAI_RAW_STAGE_EMAIL_INBOUND;
--- 3. Upload PDF documents to stage: PUT file://*.pdf @LOAI_RAW_STAGE_PDF_INBOUND;
--- 4. Monitor task execution: SHOW TASKS IN SCHEMA LOA_RAW_001;
--- 5. Verify document loading: SELECT COUNT(*) FROM LOAI_RAW_TB_EMAILS; SELECT COUNT(*) FROM LOAI_RAW_TB_DOCUMENTS;
--- 6. Deploy LOA_AGG_v001 schema for loan analytics and business logic
+-- EVENT-DRIVEN DATA FLOW:
+-- 1. Files uploaded → LOAI_RAW_STAGE_EMAIL_INBOUND (.txt files)
+-- 2. Stream detects → LOAI_RAW_STREAM_EMAIL_FILES (new files on stage)
+-- 3. Task extracts → LOAI_RAW_TASK_EXTRACT_MAIL_DATA (AI_EXTRACT, within 60 min if stream has data)
+-- 4. Store raw JSON → LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT
+-- 5. Task flattens → LOAI_RAW_TASK_FLAT_MAIL_DATA (runs automatically AFTER extraction completes)
+-- 6. Store typed data → LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT_FLAT (business-ready)
 --
--- USAGE EXAMPLES:
--- -- Upload email files for DocAI processing
--- PUT file://customer_inquiry_20250928.eml @LOAI_RAW_STAGE_EMAIL_INBOUND;
--- PUT file://loan_application_20250928.msg @LOAI_RAW_STAGE_EMAIL_INBOUND;
+-- USAGE:
+-- Upload files:
+--   PUT file://generated_data/emails/mortgage_*.txt 
+--       @LOAI_RAW_STAGE_EMAIL_INBOUND AUTO_COMPRESS=FALSE;
 --
--- -- Upload PDF documents for DocAI processing
--- PUT file://mortgage_application_Q3_2025.pdf @LOAI_RAW_STAGE_PDF_INBOUND;
--- PUT file://loan_agreement_20250928.pdf @LOAI_RAW_STAGE_PDF_INBOUND;
+-- Monitor extraction:
+--   SELECT * FROM LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT 
+--   ORDER BY EXTRACTION_TIMESTAMP DESC;
 --
--- -- Monitor email ingestion
--- SELECT FILE_NAME, LOAD_TS 
--- FROM LOAI_RAW_TB_EMAILS 
--- ORDER BY LOAD_TS DESC LIMIT 10;
+-- Query flattened data:
+--   SELECT * FROM LOAI_RAW_TB_EMAIL_INBOUND_LOAN_EXTRACT_FLAT
+--   WHERE EXTRACTION_SUCCESS = TRUE
+--   ORDER BY EXTRACTION_TIMESTAMP DESC;
 --
--- -- Monitor document ingestion
--- SELECT FILE_NAME, LOAD_TS 
--- FROM LOAI_RAW_TB_DOCUMENTS 
--- ORDER BY LOAD_TS DESC LIMIT 10;
+-- Check task status:
+--   SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())
+--   WHERE NAME LIKE 'LOAI_RAW_TASK_%'
+--   ORDER BY SCHEDULED_TIME DESC LIMIT 20;
 --
--- MONITORING:
--- - Task status: SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) WHERE NAME IN ('LOAI_RAW_TASK_LOAD_EMAILS', 'LOAI_RAW_TASK_LOAD_DOCUMENTS');
--- - Stream status: SHOW STREAMS IN SCHEMA LOA_RAW_001;
--- - Stage contents: LIST @LOAI_RAW_STAGE_EMAIL_INBOUND; LIST @LOAI_RAW_STAGE_PDF_INBOUND;
--- - DocAI processing status: Monitor file counts and processing workflows for email and PDF stages
---
--- PERFORMANCE OPTIMIZATION:
--- - Monitor warehouse usage during peak document processing periods
--- - Consider clustering on LOAD_TS for time-based queries
--- - Archive old documents based on regulatory retention requirements
--- - Implement DocAI workflows for automated content extraction
 -- ============================================================
-

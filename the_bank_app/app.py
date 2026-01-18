@@ -97,6 +97,13 @@ from utils.data_loaders import (
     load_kyc_completeness,
     load_data_quality_metrics,
     load_compliance_risk_summary,
+    # Loan portfolio data loaders
+    load_loan_portfolio_summary,
+    load_loan_ltv_distribution,
+    load_loan_application_funnel,
+    load_loan_affordability_analysis,
+    load_loan_compliance_screening,
+    load_loan_customer_summary,
     # Lifecycle data loaders
     load_customer_lifecycle,
     load_lifecycle_summary,
@@ -185,7 +192,7 @@ st.markdown("**Comprehensive Customer Intelligence • Risk Assessment • Compl
 st.markdown("---")
 
 # Create tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16 = st.tabs([
     "Customer 360°",
     "Risk & Compliance",
     "Portfolio Analytics",
@@ -199,6 +206,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13
     "KYC Screening",
     "Data Quality",
     "LCR Monitoring",
+    "Loans Portfolio",
     "Ask AI",
     "Settings"
 ])
@@ -1531,9 +1539,11 @@ with tab13:
             
             st.markdown("---")
             
-            # Alert section
-            if current_row.get('HIGH_VOLATILITY_ALERT', False) or current_row.get('CONSECUTIVE_BREACHES_3D', 0) > 0:
-                st.warning(f"⚠️ **Active Alerts**: {current_row.get('CONSECUTIVE_BREACHES_3D', 0)} consecutive breach days detected")
+            # Alert section - check if LCR is below threshold
+            if current_row.get('LCR_RATIO', 100) < 100:
+                st.error(f"🚨 **LCR BREACH**: LCR ratio is below 100% regulatory minimum!")
+            elif current_row.get('LCR_RATIO', 100) < 105:
+                st.warning(f"⚠️ **WARNING**: LCR ratio is below 105% early warning threshold")
             
             # Load alerts
             df_alerts = load_lcr_alerts()
@@ -1745,7 +1755,9 @@ with tab13:
             
             1. Deploy LCR database schemas:
                - `structure/360_LIQA_CalculateHQLAandNetCashOutflows.sql`
-               - `structure/370_LIQA_FINMA_LCR_Reporting.sql`
+               - `structure/361_LIQA_BusinessReporting_FINMA_LCR.sql`
+               - `structure/750_LCRS_SV_LCR_SEMANTIC_MODELS.sql`
+               - `structure/850_LIQUIDITY_RISK_AGENT.sql`
             
             2. Load sample data or connect to production data sources
             
@@ -1760,6 +1772,500 @@ with tab13:
 # TAB 14: Ask AI
 # ============================================================
 with tab14:
+    st.header("Loans Portfolio")
+    st.caption("Retail Loans & Mortgages Portfolio Analysis")
+    
+    # Load loan data
+    with st.spinner("Loading loan portfolio data..."):
+        df_portfolio = load_loan_portfolio_summary()
+        df_ltv = load_loan_ltv_distribution()
+        df_funnel = load_loan_application_funnel()
+        df_affordability = load_loan_affordability_analysis()
+        df_compliance = load_loan_compliance_screening()
+        df_customers = load_loan_customer_summary()
+    
+    # Key metrics
+    if not df_portfolio.empty:
+        total_apps = df_portfolio['LOAN_COUNT'].sum()
+        total_amount = df_portfolio['TOTAL_REQUESTED_AMOUNT'].sum() / 1_000_000  # Convert to millions
+        approved_count = df_portfolio[df_portfolio['APPLICATION_STATUS'] == 'APPROVED']['LOAN_COUNT'].sum()
+        declined_count = df_portfolio[df_portfolio['APPLICATION_STATUS'] == 'DECLINED']['LOAN_COUNT'].sum()
+        review_count = df_portfolio[df_portfolio['APPLICATION_STATUS'] == 'UNDER_REVIEW']['LOAN_COUNT'].sum()
+        
+        approval_rate = (approved_count / total_apps * 100) if total_apps > 0 else 0
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("Total Applications", f"{total_apps:,.0f}")
+        with col2:
+            st.metric("Total Amount", f"CHF {total_amount:,.0f}M")
+        with col3:
+            st.metric("Approved", f"{approved_count:,.0f}", f"{approval_rate:.1f}%")
+        with col4:
+            st.metric("Under Review", f"{review_count:,.0f}")
+        with col5:
+            st.metric("Declined", f"{declined_count:,.0f}")
+        
+        st.markdown("---")
+        
+        # Create sub-tabs
+        loan_tab1, loan_tab2, loan_tab3, loan_tab4, loan_tab5 = st.tabs([
+            "📊 Portfolio Overview",
+            "📈 LTV Analysis",
+            "🔄 Application Funnel",
+            "💰 Affordability",
+            "🛡️ Compliance Screening"
+        ])
+        
+        # Tab 1: Portfolio Overview
+        with loan_tab1:
+            st.subheader("Portfolio by Country & Product")
+            
+            if not df_portfolio.empty:
+                # Portfolio distribution chart
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Applications by country - aggregate by country and product
+                    apps_by_country = df_portfolio.groupby(['COUNTRY', 'PRODUCT_TYPE'])['LOAN_COUNT'].sum().reset_index()
+                    fig_apps = px.bar(
+                        apps_by_country,
+                        x='COUNTRY',
+                        y='LOAN_COUNT',
+                        color='PRODUCT_TYPE',
+                        title='Applications by Country',
+                        labels={'LOAN_COUNT': 'Applications', 'COUNTRY': 'Country'},
+                        color_discrete_sequence=px.colors.qualitative.Set2
+                    )
+                    st.plotly_chart(fig_apps, width='stretch')
+                
+                with col2:
+                    # Requested amount by country - aggregate by country and product
+                    amount_by_country = df_portfolio.groupby(['COUNTRY', 'PRODUCT_TYPE'])['TOTAL_REQUESTED_AMOUNT'].sum().reset_index()
+                    amount_by_country['TOTAL_REQUESTED_AMOUNT_M'] = amount_by_country['TOTAL_REQUESTED_AMOUNT'] / 1_000_000
+                    fig_amount = px.bar(
+                        amount_by_country,
+                        x='COUNTRY',
+                        y='TOTAL_REQUESTED_AMOUNT_M',
+                        color='PRODUCT_TYPE',
+                        title='Total Requested Amount by Country (M CHF)',
+                        labels={'TOTAL_REQUESTED_AMOUNT_M': 'Amount (M CHF)', 'COUNTRY': 'Country'},
+                        color_discrete_sequence=px.colors.qualitative.Set2
+                    )
+                    st.plotly_chart(fig_amount, width='stretch')
+                
+                st.markdown("---")
+                
+                # Portfolio status distribution
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Status distribution by country
+                    status_by_country = df_portfolio.groupby(['COUNTRY', 'APPLICATION_STATUS'])['LOAN_COUNT'].sum().reset_index()
+                    fig_status = px.bar(
+                        status_by_country,
+                        x='COUNTRY',
+                        y='LOAN_COUNT',
+                        color='APPLICATION_STATUS',
+                        title='Application Status by Country',
+                        labels={'LOAN_COUNT': 'Count', 'COUNTRY': 'Country'},
+                        color_discrete_map={
+                            'APPROVED': '#28A745',
+                            'DECLINED': '#DC3545',
+                            'UNDER_REVIEW': '#FFC107'
+                        },
+                        barmode='stack'
+                    )
+                    st.plotly_chart(fig_status, width='stretch')
+                
+                with col2:
+                    # Average loan amounts by country
+                    avg_amount_by_country = df_portfolio.groupby('COUNTRY')['AVG_REQUESTED_AMOUNT'].mean().reset_index()
+                    fig_avg = px.bar(
+                        avg_amount_by_country,
+                        x='COUNTRY',
+                        y='AVG_REQUESTED_AMOUNT',
+                        title='Average Requested Amount by Country',
+                        labels={'AVG_REQUESTED_AMOUNT': 'Average Amount (CHF)', 'COUNTRY': 'Country'},
+                        color='AVG_REQUESTED_AMOUNT',
+                        color_continuous_scale='Blues'
+                    )
+                    st.plotly_chart(fig_avg, width='stretch')
+                
+                st.markdown("---")
+                
+                # Portfolio table
+                st.subheader("Detailed Portfolio Breakdown")
+                st.dataframe(
+                    df_portfolio.style.format({
+                        'TOTAL_REQUESTED_AMOUNT': '{:,.0f}',
+                        'AVG_REQUESTED_AMOUNT': '{:,.0f}'
+                    }),
+                    width='stretch',
+                    height=400
+                )
+            else:
+                st.warning("No portfolio data available")
+        
+        # Tab 2: LTV Analysis
+        with loan_tab2:
+            st.subheader("Loan-to-Value (LTV) Distribution")
+            
+            if not df_ltv.empty:
+                # LTV distribution chart
+                fig_ltv = px.bar(
+                    df_ltv,
+                    x='LTV_BUCKET',
+                    y='LOAN_COUNT',
+                    title='Loan Count by LTV Bucket',
+                    labels={'LOAN_COUNT': 'Loans', 'LTV_BUCKET': 'LTV Bucket'},
+                    color='AVG_LTV_PCT',
+                    color_continuous_scale='RdYlGn_r'
+                )
+                st.plotly_chart(fig_ltv, width='stretch')
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # LTV amount distribution
+                    df_ltv_millions = df_ltv.copy()
+                    df_ltv_millions['TOTAL_LOAN_AMOUNT_M'] = df_ltv_millions['TOTAL_LOAN_AMOUNT'] / 1_000_000
+                    fig_ltv_amt = px.bar(
+                        df_ltv_millions,
+                        x='LTV_BUCKET',
+                        y='TOTAL_LOAN_AMOUNT_M',
+                        title='Total Loan Amount by LTV Bucket (M CHF)',
+                        labels={'TOTAL_LOAN_AMOUNT_M': 'Amount (M CHF)', 'LTV_BUCKET': 'LTV Bucket'},
+                        color='LTV_BUCKET',
+                        color_discrete_sequence=px.colors.sequential.Reds
+                    )
+                    st.plotly_chart(fig_ltv_amt, width='stretch')
+                
+                with col2:
+                    # High-risk concentration (>80% LTV)
+                    high_risk_ltv = df_ltv[df_ltv['LTV_BUCKET'].isin(['80-90%', '>90%'])]
+                    if not high_risk_ltv.empty:
+                        fig_high_risk = px.pie(
+                            high_risk_ltv,
+                            values='LOAN_COUNT',
+                            names='LTV_BUCKET',
+                            title='High-Risk LTV Distribution (>80%)',
+                            color_discrete_sequence=px.colors.sequential.Reds
+                        )
+                        st.plotly_chart(fig_high_risk, width='stretch')
+                    else:
+                        st.success("✅ No high-risk LTV applications found (>80%)")
+                
+                st.markdown("---")
+                
+                # LTV table
+                st.subheader("LTV Distribution Details")
+                df_ltv_display = df_ltv.copy()
+                df_ltv_display['TOTAL_COLLATERAL_VALUE_M'] = df_ltv_display['TOTAL_COLLATERAL_VALUE'] / 1_000_000
+                df_ltv_display['TOTAL_LOAN_AMOUNT_M'] = df_ltv_display['TOTAL_LOAN_AMOUNT'] / 1_000_000
+                
+                st.dataframe(
+                    df_ltv_display[['LTV_BUCKET', 'LOAN_COUNT', 'TOTAL_LOAN_AMOUNT_M', 'AVG_LTV_PCT', 'TOTAL_COLLATERAL_VALUE_M', 'PCT_OF_TOTAL_LOANS']].style.format({
+                        'TOTAL_LOAN_AMOUNT_M': '{:,.2f}',
+                        'AVG_LTV_PCT': '{:.2f}%',
+                        'TOTAL_COLLATERAL_VALUE_M': '{:,.2f}',
+                        'PCT_OF_TOTAL_LOANS': '{:.2f}%'
+                    }),
+                    width='stretch',
+                    height=400
+                )
+            else:
+                st.warning("No LTV distribution data available")
+        
+        # Tab 3: Application Funnel
+        with loan_tab3:
+            st.subheader("Application Status Funnel")
+            
+            if not df_funnel.empty:
+                # Create funnel data
+                total_apps = df_funnel['TOTAL_APPLICATIONS'].sum()
+                total_approved = df_funnel['APPROVED_COUNT'].sum()
+                total_declined = df_funnel['DECLINED_COUNT'].sum()
+                total_review = df_funnel['UNDER_REVIEW_COUNT'].sum()
+                
+                funnel_data = pd.DataFrame({
+                    'Stage': ['Submitted', 'Under Review', 'Approved', 'Declined'],
+                    'Count': [total_apps, total_review, total_approved, total_declined]
+                })
+                
+                # Funnel chart
+                fig_funnel = px.funnel(
+                    funnel_data[funnel_data['Stage'].isin(['Submitted', 'Under Review', 'Approved'])],
+                    x='Count',
+                    y='Stage',
+                    title='Application Funnel (All Countries)'
+                )
+                st.plotly_chart(fig_funnel, width='stretch')
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Status by country
+                    status_data = df_funnel.groupby('COUNTRY').agg({
+                        'APPROVED_COUNT': 'sum',
+                        'DECLINED_COUNT': 'sum',
+                        'UNDER_REVIEW_COUNT': 'sum'
+                    }).reset_index()
+                    
+                    fig_status = px.bar(
+                        status_data,
+                        x='COUNTRY',
+                        y=['APPROVED_COUNT', 'UNDER_REVIEW_COUNT', 'DECLINED_COUNT'],
+                        title='Applications by Status & Country',
+                        labels={'value': 'Count', 'variable': 'Status'},
+                        barmode='stack',
+                        color_discrete_map={
+                            'APPROVED_COUNT': '#28A745',
+                            'UNDER_REVIEW_COUNT': '#FFC107',
+                            'DECLINED_COUNT': '#DC3545'
+                        }
+                    )
+                    st.plotly_chart(fig_status, width='stretch')
+                
+                with col2:
+                    # Approval rates by country
+                    rates_data = df_funnel.groupby('COUNTRY')['APPROVAL_RATE_PCT'].mean().reset_index()
+                    fig_rates = px.bar(
+                        rates_data,
+                        x='COUNTRY',
+                        y='APPROVAL_RATE_PCT',
+                        title='Average Approval Rate by Country (%)',
+                        labels={'APPROVAL_RATE_PCT': 'Approval Rate (%)'},
+                        color='APPROVAL_RATE_PCT',
+                        color_continuous_scale='Greens'
+                    )
+                    st.plotly_chart(fig_rates, width='stretch')
+                
+                st.markdown("---")
+                
+                # Funnel table
+                st.subheader("Application Funnel Details")
+                st.dataframe(
+                    df_funnel.style.format({
+                        'AVG_REQUESTED_AMOUNT': '{:,.0f}',
+                        'APPROVAL_RATE_PCT': '{:.2f}%',
+                        'DECLINE_RATE_PCT': '{:.2f}%'
+                    }),
+                    width='stretch',
+                    height=400
+                )
+            else:
+                st.warning("No application funnel data available")
+        
+        # Tab 4: Affordability
+        with loan_tab4:
+            st.subheader("Affordability Assessment")
+            
+            if not df_affordability.empty:
+                # Aggregate by country for simpler charts
+                aff_by_country = df_affordability.groupby('COUNTRY').agg({
+                    'ASSESSMENT_COUNT': 'sum',
+                    'AVG_DTI_RATIO_PCT': 'mean',
+                    'AVG_DSTI_RATIO_PCT': 'mean',
+                    'AVG_GROSS_INCOME': 'mean',
+                    'AVG_DEBT_OBLIGATIONS': 'mean',
+                    'PASS_RATE_PCT': 'mean'
+                }).reset_index()
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # DTI distribution
+                    fig_dti = px.bar(
+                        aff_by_country,
+                        x='COUNTRY',
+                        y='AVG_DTI_RATIO_PCT',
+                        title='Average DTI Ratio by Country (%)',
+                        labels={'AVG_DTI_RATIO_PCT': 'DTI Ratio (%)'},
+                        color='AVG_DTI_RATIO_PCT',
+                        color_continuous_scale='RdYlGn_r'
+                    )
+                    fig_dti.add_hline(y=45, line_dash="dash", line_color="red", annotation_text="45% Threshold")
+                    st.plotly_chart(fig_dti, width='stretch')
+                
+                with col2:
+                    # DSTI distribution
+                    fig_dsti = px.bar(
+                        aff_by_country,
+                        x='COUNTRY',
+                        y='AVG_DSTI_RATIO_PCT',
+                        title='Average DSTI Ratio by Country (%)',
+                        labels={'AVG_DSTI_RATIO_PCT': 'DSTI Ratio (%)'},
+                        color='AVG_DSTI_RATIO_PCT',
+                        color_continuous_scale='RdYlGn_r'
+                    )
+                    fig_dsti.add_hline(y=33.33, line_dash="dash", line_color="orange", annotation_text="Swiss 33⅓% Threshold")
+                    st.plotly_chart(fig_dsti, width='stretch')
+                
+                # Income vs debt
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Average income
+                    fig_income = px.bar(
+                        aff_by_country,
+                        x='COUNTRY',
+                        y='AVG_GROSS_INCOME',
+                        title='Average Gross Income by Country',
+                        labels={'AVG_GROSS_INCOME': 'Gross Income (CHF)'},
+                        color='COUNTRY'
+                    )
+                    st.plotly_chart(fig_income, width='stretch')
+                
+                with col2:
+                    # Pass rates by country
+                    fig_pass = px.bar(
+                        aff_by_country,
+                        x='COUNTRY',
+                        y='PASS_RATE_PCT',
+                        title='Affordability Pass Rate by Country (%)',
+                        labels={'PASS_RATE_PCT': 'Pass Rate (%)'},
+                        color='PASS_RATE_PCT',
+                        color_continuous_scale='Greens'
+                    )
+                    st.plotly_chart(fig_pass, width='stretch')
+                
+                st.markdown("---")
+                
+                # Affordability table
+                st.subheader("Affordability Details by Country & Result")
+                st.dataframe(
+                    df_affordability.style.format({
+                        'AVG_GROSS_INCOME': '{:,.0f}',
+                        'AVG_DEBT_OBLIGATIONS': '{:,.0f}',
+                        'AVG_DTI_RATIO_PCT': '{:.2f}%',
+                        'AVG_DSTI_RATIO_PCT': '{:.2f}%',
+                        'PASS_RATE_PCT': '{:.2f}%'
+                    }),
+                    width='stretch',
+                    height=300
+                )
+            else:
+                st.warning("No affordability data available")
+        
+        # Tab 5: Compliance Screening
+        with loan_tab5:
+            st.subheader("Compliance & Risk Screening")
+            
+            if not df_compliance.empty:
+                # Compliance metrics
+                total_flagged = len(df_compliance)
+                sanctions_count = df_compliance['REQUIRES_SANCTIONS_REVIEW'].sum()
+                pep_count = df_compliance['REQUIRES_EXPOSED_PERSON_REVIEW'].sum()
+                vulnerable_count = df_compliance['VULNERABLE_CUSTOMER_FLAG'].sum()
+                high_risk_count = len(df_compliance[df_compliance['OVERALL_RISK_RATING'].isin(['CRITICAL', 'HIGH'])])
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Flagged", f"{total_flagged:,}")
+                with col2:
+                    st.metric("Sanctions Review", f"{sanctions_count:,}", delta="Critical", delta_color="inverse")
+                with col3:
+                    st.metric("PEP Review", f"{pep_count:,}", delta="High", delta_color="inverse")
+                with col4:
+                    st.metric("Vulnerable Customers", f"{vulnerable_count:,}")
+                
+                st.markdown("---")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Compliance status distribution
+                    compliance_counts = df_compliance['COMPLIANCE_STATUS'].value_counts().reset_index()
+                    compliance_counts.columns = ['Status', 'Count']
+                    fig_compliance = px.pie(
+                        compliance_counts,
+                        values='Count',
+                        names='Status',
+                        title='Applications by Compliance Status',
+                        color_discrete_sequence=px.colors.sequential.RdBu
+                    )
+                    st.plotly_chart(fig_compliance, width='stretch')
+                
+                with col2:
+                    # Risk rating distribution
+                    risk_counts = df_compliance['OVERALL_RISK_RATING'].value_counts().reset_index()
+                    risk_counts.columns = ['Risk Rating', 'Count']
+                    fig_risk = px.bar(
+                        risk_counts,
+                        x='Risk Rating',
+                        y='Count',
+                        title='Applications by Risk Rating',
+                        color='Risk Rating',
+                        color_discrete_map={
+                            'CRITICAL': '#DC3545',
+                            'HIGH': '#FF8C00',
+                            'MEDIUM': '#FFC107',
+                            'LOW': '#28A745'
+                        }
+                    )
+                    st.plotly_chart(fig_risk, width='stretch')
+                
+                st.markdown("---")
+                
+                # Applications requiring review
+                st.subheader("Applications Requiring Compliance Review")
+                
+                # Filter options
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    filter_compliance = st.multiselect(
+                        "Compliance Status",
+                        options=df_compliance['COMPLIANCE_STATUS'].unique(),
+                        default=df_compliance['COMPLIANCE_STATUS'].unique()
+                    )
+                with col2:
+                    filter_risk = st.multiselect(
+                        "Risk Rating",
+                        options=df_compliance['OVERALL_RISK_RATING'].unique(),
+                        default=df_compliance['OVERALL_RISK_RATING'].unique()
+                    )
+                with col3:
+                    filter_country = st.multiselect(
+                        "Country",
+                        options=df_compliance['COUNTRY'].unique(),
+                        default=df_compliance['COUNTRY'].unique()
+                    )
+                
+                # Apply filters
+                df_filtered = df_compliance[
+                    (df_compliance['COMPLIANCE_STATUS'].isin(filter_compliance)) &
+                    (df_compliance['OVERALL_RISK_RATING'].isin(filter_risk)) &
+                    (df_compliance['COUNTRY'].isin(filter_country))
+                ]
+                
+                st.dataframe(
+                    df_filtered.style.format({
+                        'REQUESTED_AMOUNT': '{:,.0f}'
+                    }),
+                    width='stretch',
+                    height=400
+                )
+                
+                # Export option
+                if st.button("📥 Export Compliance Report"):
+                    csv = df_filtered.to_csv(index=False)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name=f"loan_compliance_report_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv"
+                    )
+            else:
+                st.info("✅ No applications currently flagged for compliance review")
+        
+    else:
+        st.warning("⚠️ No loan portfolio data available. Please check data pipeline.")
+
+# ============================================================
+# TAB 15: Ask AI
+# ============================================================
+with tab15:
     st.header("Ask AI Anything About Your Customers")
     
     st.info("🤖 **Powered by Snowflake Cortex AI Agent** - Natural language query interface")
@@ -1910,9 +2416,9 @@ with tab14:
     st.caption("Query history feature coming soon...")
 
 # ============================================================
-# TAB 15: Settings
+# TAB 16: Settings
 # ============================================================
-with tab15:
+with tab16:
     st.header("Settings")
     
     # Data freshness

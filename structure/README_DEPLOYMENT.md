@@ -71,7 +71,7 @@ structure/
 ├─ 810_CRM_INTELLIGENCE_AGENT.sql   # AI Agent: CRM Customer 360
 ├─ 811_COMPLIANCE_MONITORING_AGENT.sql # AI Agent: Compliance Monitoring
 ├─ 830_WEALTH_ADVISOR_AGENT.sql     # AI Agent: Wealth Advisor
-└─ 850_RISK_REGULATORY_AGENT.sql    # AI Agent: Risk & Regulatory
+└─ 820_RISK_REGULATORY_AGENT.sql    # AI Agent: Risk & Regulatory
 ```
 
 ---
@@ -161,7 +161,7 @@ structure/
 | **810_CRM_INTELLIGENCE_AGENT.sql** | CRM_AGG_001 | Customer 360 AI agent | CRM_Customer_360 |
 | **811_COMPLIANCE_MONITORING_AGENT.sql** | PAY_AGG_001 | AML/compliance AI agent | COMPLIANCE_MONITORING_AGENT |
 | **830_WEALTH_ADVISOR_AGENT.sql** | REP_AGG_001 | Wealth advisor AI agent | WEALTH_ADVISOR_AGENT |
-| **850_RISK_REGULATORY_AGENT.sql** | REP_AGG_001 | Risk/regulatory AI agent | RISK_REGULATORY_AGENT |
+| **820_RISK_REGULATORY_AGENT.sql** | REP_AGG_001 | Risk/regulatory AI agent | RISK_REGULATORY_AGENT |
 
 ---
 

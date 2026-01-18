@@ -873,25 +873,26 @@ def load_lcr_current_status():
         
         query = """
             SELECT 
-                REPORTING_DATE,
+                AS_OF_DATE as REPORTING_DATE,
                 LCR_RATIO,
                 LCR_STATUS,
                 SEVERITY,
                 HQLA_TOTAL,
                 OUTFLOW_TOTAL,
                 LCR_BUFFER_CHF,
+                LCR_BUFFER_PCT,
                 L1_TOTAL,
                 L2_CAPPED,
                 L2A_TOTAL,
                 L2B_TOTAL,
                 CAP_APPLIED,
-                HIGH_VOLATILITY_ALERT,
-                CONSECUTIVE_BREACHES_3D,
-                LCR_7D_AVG,
-                LCR_30D_AVG,
-                LCR_90D_AVG,
-                LCR_DOD_CHANGE
-            FROM REP_AGG_001.REPP_VW_LCR_MONITORING
+                DISCARDED_L2,
+                OUTFLOW_RETAIL,
+                OUTFLOW_CORP,
+                OUTFLOW_FI,
+                CALCULATION_TIMESTAMP
+            FROM REP_AGG_001.REPP_AGG_DT_LCR_DAILY
+            WHERE AS_OF_DATE = (SELECT MAX(AS_OF_DATE) FROM REP_AGG_001.REPP_AGG_DT_LCR_DAILY)
             LIMIT 1
         """
         
@@ -1097,5 +1098,239 @@ def load_lcr_monthly_summary():
     
     except Exception as e:
         st.error(f"Error loading monthly summary: {str(e)}")
+        return pd.DataFrame()
+
+
+# ============================================================
+# LOAN PORTFOLIO DATA LOADERS
+# ============================================================
+
+@st.cache_data(ttl=3600)
+def load_loan_portfolio_summary():
+    """
+    Load loan portfolio summary metrics
+    
+    Returns:
+        pandas.DataFrame: Portfolio summary by country and product
+    """
+    try:
+        session = get_snowflake_session()
+        
+        query = """
+            SELECT 
+                COUNTRY,
+                PRODUCT_TYPE,
+                APPLICATION_STATUS,
+                LOAN_COUNT,
+                TOTAL_REQUESTED_AMOUNT,
+                AVG_REQUESTED_AMOUNT,
+                MIN_REQUESTED_AMOUNT,
+                MAX_REQUESTED_AMOUNT,
+                AVG_TERM_MONTHS
+            FROM REP_AGG_001.LOAR_AGG_DT_PORTFOLIO_SUMMARY
+            WHERE AS_OF_DATE = CURRENT_DATE()
+            ORDER BY TOTAL_REQUESTED_AMOUNT DESC
+        """
+        
+        df = session.sql(query).to_pandas()
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading loan portfolio summary: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def load_loan_ltv_distribution():
+    """
+    Load LTV distribution for loan portfolio
+    
+    Returns:
+        pandas.DataFrame: LTV distribution by bucket
+    """
+    try:
+        session = get_snowflake_session()
+        
+        query = """
+            SELECT 
+                LTV_BUCKET,
+                LTV_BUCKET_SORT_ORDER,
+                LOAN_COUNT,
+                TOTAL_LOAN_AMOUNT,
+                AVG_LTV_PCT,
+                TOTAL_COLLATERAL_VALUE,
+                PCT_OF_TOTAL_LOANS
+            FROM REP_AGG_001.LOAR_AGG_DT_LTV_DISTRIBUTION
+            WHERE AS_OF_DATE = CURRENT_DATE()
+            ORDER BY LTV_BUCKET_SORT_ORDER
+        """
+        
+        df = session.sql(query).to_pandas()
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading LTV distribution: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def load_loan_application_funnel():
+    """
+    Load loan application funnel by status
+    
+    Returns:
+        pandas.DataFrame: Application counts by status
+    """
+    try:
+        session = get_snowflake_session()
+        
+        query = """
+            SELECT 
+                PRODUCT_TYPE,
+                COUNTRY,
+                CHANNEL,
+                TOTAL_APPLICATIONS,
+                APPROVED_COUNT,
+                DECLINED_COUNT,
+                UNDER_REVIEW_COUNT,
+                APPROVAL_RATE_PCT,
+                DECLINE_RATE_PCT,
+                AVG_REQUESTED_AMOUNT
+            FROM REP_AGG_001.LOAR_AGG_DT_APPLICATION_FUNNEL
+            WHERE AS_OF_DATE = CURRENT_DATE()
+            ORDER BY TOTAL_APPLICATIONS DESC
+        """
+        
+        df = session.sql(query).to_pandas()
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading application funnel: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def load_loan_affordability_analysis():
+    """
+    Load affordability analysis for loan applications
+    
+    Returns:
+        pandas.DataFrame: Affordability metrics by country
+    """
+    try:
+        session = get_snowflake_session()
+        
+        query = """
+            SELECT 
+                COUNTRY,
+                AFFORDABILITY_RESULT,
+                ASSESSMENT_COUNT,
+                AVG_DTI_RATIO_PCT,
+                AVG_DSTI_RATIO_PCT,
+                AVG_GROSS_INCOME,
+                AVG_DEBT_OBLIGATIONS,
+                PASS_RATE_PCT
+            FROM REP_AGG_001.LOAR_AGG_DT_AFFORDABILITY_SUMMARY
+            WHERE AS_OF_DATE = CURRENT_DATE()
+            ORDER BY COUNTRY, AFFORDABILITY_RESULT
+        """
+        
+        df = session.sql(query).to_pandas()
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading affordability analysis: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def load_loan_compliance_screening():
+    """
+    Load compliance screening results for loan applications
+    
+    Returns:
+        pandas.DataFrame: Applications with compliance flags
+    """
+    try:
+        session = get_snowflake_session()
+        
+        query = """
+            SELECT 
+                APPLICATION_ID,
+                CUSTOMER_ID,
+                FULL_NAME,
+                COUNTRY,
+                REQUESTED_AMOUNT,
+                APPLICATION_STATUS,
+                REQUIRES_SANCTIONS_REVIEW,
+                REQUIRES_EXPOSED_PERSON_REVIEW,
+                OVERALL_RISK_RATING,
+                VULNERABLE_CUSTOMER_FLAG,
+                COMPLIANCE_HOLD_FLAG,
+                COMPLIANCE_STATUS,
+                APPLICATION_DATE_TIME
+            FROM REP_AGG_001.LOAR_AGG_VW_COMPLIANCE_SCREENING
+            WHERE COMPLIANCE_HOLD_FLAG = TRUE
+                OR VULNERABLE_CUSTOMER_FLAG = TRUE
+                OR OVERALL_RISK_RATING IN ('CRITICAL', 'HIGH')
+            ORDER BY 
+                CASE COMPLIANCE_STATUS
+                    WHEN 'SANCTIONS_REVIEW' THEN 1
+                    WHEN 'PEP_REVIEW' THEN 2
+                    WHEN 'HIGH_RISK_REVIEW' THEN 3
+                    ELSE 4
+                END,
+                APPLICATION_DATE_TIME DESC
+            LIMIT 100
+        """
+        
+        df = session.sql(query).to_pandas()
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading compliance screening: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def load_loan_customer_summary():
+    """
+    Load customer-level loan summary
+    
+    Returns:
+        pandas.DataFrame: Loan summary per customer
+    """
+    try:
+        session = get_snowflake_session()
+        
+        query = """
+            SELECT 
+                cls.CUSTOMER_ID,
+                c.FULL_NAME as CUSTOMER_NAME,
+                cls.TOTAL_APPLICATIONS,
+                cls.APPROVED_APPLICATIONS,
+                cls.DECLINED_APPLICATIONS,
+                cls.TOTAL_APPROVED_AMOUNT,
+                cls.AVG_REQUESTED_AMOUNT,
+                cls.LATEST_APPLICATION_DATE,
+                cls.LATEST_APPLICATION_STATUS,
+                cls.AVG_LTV_PCT,
+                cls.AFFORDABILITY_PASS_COUNT,
+                cls.AFFORDABILITY_FAIL_COUNT,
+                c.VULNERABLE_CUSTOMER_FLAG,
+                c.REQUIRES_SANCTIONS_REVIEW,
+                c.REQUIRES_EXPOSED_PERSON_REVIEW
+            FROM REP_AGG_001.LOAR_AGG_DT_CUSTOMER_LOAN_SUMMARY cls
+            LEFT JOIN CRM_AGG_001.CRMA_AGG_DT_CUSTOMER_360 c ON cls.CUSTOMER_ID = c.CUSTOMER_ID
+            WHERE cls.TOTAL_APPLICATIONS > 0
+            ORDER BY cls.TOTAL_APPROVED_AMOUNT DESC
+            LIMIT 100
+        """
+        
+        df = session.sql(query).to_pandas()
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading customer loan summary: {str(e)}")
         return pd.DataFrame()
 

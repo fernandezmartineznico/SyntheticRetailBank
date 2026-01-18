@@ -8,7 +8,7 @@
 
 ## Features
 
-### **15 Integrated Dashboards**
+### **16 Integrated Dashboards**
 
 1. **Customer 360° Search** - Find and view complete customer profiles with all 48 attributes
 2. **Risk & Compliance Dashboard** - Executive view of risk distribution, PEP/sanctions screening
@@ -23,8 +23,9 @@
 11. **KYC & Customer Screening** - PEP identification, KYC completeness, screening audit trails
 12. **Data Quality & Controls** - Data completeness metrics, control effectiveness, quality monitoring
 13. **LCR Monitoring** - FINMA Liquidity Coverage Ratio reporting, real-time liquidity risk monitoring, regulatory compliance
-14. **Ask AI** - Natural language queries powered by Snowflake Cortex AI Agent
-15. **Settings** - Data refresh, preferences, connection status
+14. **Loans Portfolio** - Retail loans & mortgages portfolio analysis, LTV/DTI monitoring, affordability assessment, compliance screening
+15. **Ask AI** - Natural language queries powered by Snowflake Cortex AI Agent
+16. **Settings** - Data refresh, preferences, connection status
 
 ### **Key Capabilities**
 
@@ -90,6 +91,18 @@ REPP_AGG_VW_LCR_DEPOSIT_BALANCES_DETAIL -- Deposit outflows detail
 REPP_AGG_VW_LCR_ALERTS -- Active LCR alerts
 REPP_AGG_VW_LCR_MONTHLY_SUMMARY -- Monthly compliance summary
 REPP_VW_LCR_MONITORING -- Consolidated LCR monitoring view
+
+-- Loan Portfolio tables (in REP_AGG_001, for Loans Portfolio tab)
+LOAR_AGG_DT_PORTFOLIO_SUMMARY -- Portfolio summary by country/product
+LOAR_AGG_DT_LTV_DISTRIBUTION -- LTV ratio distribution analysis
+LOAR_AGG_DT_APPLICATION_FUNNEL -- Application status funnel
+LOAR_AGG_DT_AFFORDABILITY_SUMMARY -- Affordability assessment metrics
+LOAR_AGG_DT_CUSTOMER_LOAN_SUMMARY -- Customer-level loan summary
+LOAR_AGG_VW_PORTFOLIO_CURRENT -- Current portfolio view
+LOAR_AGG_VW_LTV_DISTRIBUTION -- LTV distribution view
+LOAR_AGG_VW_APPLICATION_FUNNEL -- Application funnel view
+LOAR_AGG_VW_AFFORDABILITY_ANALYSIS -- Affordability analysis view
+LOAR_AGG_VW_COMPLIANCE_SCREENING -- Compliance screening results
 
 -- Cortex AI Agent (optional, for Ask AI tab)
 AAA_DEV_SYNTHETIC_BANK.CRM_AGG_001.CRM_CUSTOMER_360 -- AI Agent

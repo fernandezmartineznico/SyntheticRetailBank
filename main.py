@@ -433,9 +433,31 @@ def main():
         print("\nStarting data generation...")
         start_time = datetime.now()
         
-        # Generate basic files first (customers, accounts, transactions, etc.)
-        print("\nGenerating basic files...")
-        results = file_generator.generate_all_files()
+        # Check if user specified any specific generation flags (exclusive mode)
+        specific_generation_requested = any([
+            args.generate_swift,
+            args.generate_pep,
+            args.generate_mortgage_emails,
+            args.generate_address_updates,
+            args.generate_customer_updates,
+            args.generate_customer_snapshot,
+            args.generate_fixed_income,
+            args.generate_commodities,
+            args.generate_lifecycle,
+            args.generate_employees
+        ])
+        
+        # Generate basic files only if no specific generation was requested
+        # OR if specific generators need customer/account data as dependencies
+        if not specific_generation_requested:
+            # Default mode: generate all basic files
+            print("\nGenerating basic files...")
+            results = file_generator.generate_all_files()
+        else:
+            # Exclusive mode: generate only customer master data (required dependency)
+            print("\n⚙️  Specific generation mode: generating ONLY requested entities")
+            print("   (Minimal customer data will be generated as dependency)")
+            results = file_generator.generate_minimal_files()
         
         # Generate SWIFT messages if requested
         swift_results = None
@@ -896,10 +918,17 @@ def main():
         print("\n" + "=" * 80)
         print("🎉 COMPLETE GENERATION SUMMARY")
         print("=" * 80)
-        print(f"✅ Banking data generation: SUCCESS")
-        print(f"   - Customers: {results['total_customers']} ({results['anomalous_customers']} anomalous)")
-        print(f"   - Transactions: {results['total_transactions']}")
-        print(f"   - Files: {results['daily_file_count']} daily files + 5 master files")
+        
+        # Handle both full and minimal generation modes
+        if results.get('minimal_mode', False):
+            print(f"✅ Minimal customer data generation: SUCCESS")
+            print(f"   - Customers: {results['total_customers']} ({results['anomalous_customers']} anomalous)")
+            print(f"   - Mode: Exclusive generation (only requested entities)")
+        else:
+            print(f"✅ Banking data generation: SUCCESS")
+            print(f"   - Customers: {results['total_customers']} ({results['anomalous_customers']} anomalous)")
+            print(f"   - Transactions: {results['total_transactions']}")
+            print(f"   - Files: {results['daily_file_count']} daily files + 5 master files")
         
         if args.generate_swift and swift_results:
             print(f"✅ SWIFT message generation: SUCCESS")

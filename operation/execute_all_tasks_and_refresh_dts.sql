@@ -41,18 +41,18 @@
 USE DATABASE AAA_DEV_SYNTHETIC_BANK;
 
 -- ============================================================
--- STEP 1: EXECUTE ALL RAW LAYER TASKS (17 root tasks)
+-- STEP 1: EXECUTE ALL RAW LAYER TASKS (16 root tasks: 15 data load + 1 DocAI extraction)
 -- ============================================================
 -- These tasks load data from Snowflake stages into RAW tables
 -- Execute in logical order: Master data → Reference data → Transactional data
 -- 
 -- NOTE: After each load task completes, its associated cleanup task will
 -- automatically execute to remove old files from the stage (keeping last 5 files).
--- 15 cleanup tasks + 1 customer status task = 16 child tasks run automatically.
+-- 15 cleanup tasks + 1 customer status task + 1 DocAI flatten = 17 child tasks auto-triggered.
 -- ============================================================
 
 SELECT 'STEP 1: Executing RAW layer tasks to load data from stages...' AS status;
-SELECT 'Note: 16 child tasks will run automatically (15 cleanup + 1 customer status)' AS info;
+SELECT 'Note: 17 child tasks will run automatically (15 cleanup + 1 customer status + 1 DocAI flatten)' AS info;
 
 -- ============================================================
 -- Execute CRM_RAW_001 Tasks (6 root tasks, 1 child auto-triggered)
@@ -143,17 +143,19 @@ EXECUTE TASK CMD_RAW_001.CMDI_LOAD_TRADES_TASK;
 SELECT 'Executed: CMDI_LOAD_TRADES_TASK' AS status;
 
 -- ============================================================
--- Execute LOA_RAW_001 Tasks (2 tasks)
+-- Execute LOA_RAW_001 Tasks (1 root task - DocAI extraction)
 -- ============================================================
-SELECT 'Executing loan document tasks...' AS status;
+SELECT 'Executing loan DocAI extraction task...' AS status;
 
--- Load loan emails
-EXECUTE TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_EMAILS;
-SELECT 'Executed: LOAI_RAW_TASK_LOAD_EMAILS' AS status;
+-- Note: Loan module uses simplified architecture:
+-- - Email files are uploaded directly to LOAI_RAW_STAGE_EMAIL_INBOUND
+-- - Stream LOAI_RAW_STREAM_EMAIL_FILES detects new files
+-- - Task LOAI_RAW_TASK_EXTRACT_MAIL_DATA extracts data with AI_EXTRACT
+-- - Task LOAI_RAW_TASK_FLAT_MAIL_DATA flattens data (auto-triggered AFTER extraction)
 
--- Load loan PDF documents
-EXECUTE TASK LOA_RAW_001.LOAI_RAW_TASK_LOAD_DOCUMENTS;
-SELECT 'Executed: LOAI_RAW_TASK_LOAD_DOCUMENTS' AS status;
+-- Extract loan data using AI_EXTRACT (this will auto-trigger FLAT_MAIL_DATA task)
+EXECUTE TASK LOA_RAW_001.LOAI_RAW_TASK_EXTRACT_MAIL_DATA;
+SELECT 'Executed: LOAI_RAW_TASK_EXTRACT_MAIL_DATA (AI_EXTRACT - will auto-trigger FLAT_MAIL_DATA)' AS status;
 
 -- ============================================================
 -- Execute REP_RAW_001 Tasks (2 tasks - FINMA LCR)
@@ -438,17 +440,52 @@ ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_PORTFOLIO_PERFORMANCE REFRESH;
 SELECT 'Refreshed: REPP_AGG_DT_PORTFOLIO_PERFORMANCE' AS status;
 
 -- ============================================================
--- Refresh REP_AGG_001 Dynamic Tables (FINMA LCR - 2 tables)
+-- Refresh REP_AGG_001 Dynamic Tables (FINMA LCR - 6 tables)
 -- ============================================================
 SELECT 'Refreshing FINMA LCR liquidity reporting tables...' AS status;
 
+-- Base HQLA and Outflow aggregations
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_HQLA REFRESH;
+SELECT 'Refreshed: REPP_AGG_DT_LCR_HQLA' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_OUTFLOW REFRESH;
+SELECT 'Refreshed: REPP_AGG_DT_LCR_OUTFLOW' AS status;
+
+-- LCR calculations
 ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_HQLA_CALCULATION REFRESH;
 SELECT 'Refreshed: REPP_AGG_DT_LCR_HQLA_CALCULATION' AS status;
 
 ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_OUTFLOW_CALCULATION REFRESH;
 SELECT 'Refreshed: REPP_AGG_DT_LCR_OUTFLOW_CALCULATION' AS status;
 
-SELECT 'STEP 3 COMPLETE: All 31 REPORTING layer dynamic tables refreshed' AS status;
+-- LCR daily and trend reporting
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_DAILY REFRESH;
+SELECT 'Refreshed: REPP_AGG_DT_LCR_DAILY' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.REPP_AGG_DT_LCR_TREND REFRESH;
+SELECT 'Refreshed: REPP_AGG_DT_LCR_TREND' AS status;
+
+-- ============================================================
+-- Refresh REP_AGG_001 Dynamic Tables (Loan Portfolio - 5 tables)
+-- ============================================================
+SELECT 'Refreshing loan portfolio reporting tables...' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_PORTFOLIO_SUMMARY REFRESH;
+SELECT 'Refreshed: LOAR_AGG_DT_PORTFOLIO_SUMMARY' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_LTV_DISTRIBUTION REFRESH;
+SELECT 'Refreshed: LOAR_AGG_DT_LTV_DISTRIBUTION' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_APPLICATION_FUNNEL REFRESH;
+SELECT 'Refreshed: LOAR_AGG_DT_APPLICATION_FUNNEL' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_AFFORDABILITY_SUMMARY REFRESH;
+SELECT 'Refreshed: LOAR_AGG_DT_AFFORDABILITY_SUMMARY' AS status;
+
+ALTER DYNAMIC TABLE REP_AGG_001.LOAR_AGG_DT_CUSTOMER_LOAN_SUMMARY REFRESH;
+SELECT 'Refreshed: LOAR_AGG_DT_CUSTOMER_LOAN_SUMMARY' AS status;
+
+SELECT 'STEP 3 COMPLETE: All 40 REPORTING layer dynamic tables refreshed' AS status;
 
 -- ============================================================
 -- COMPLETION SUMMARY
@@ -456,10 +493,10 @@ SELECT 'STEP 3 COMPLETE: All 31 REPORTING layer dynamic tables refreshed' AS sta
 SELECT
     'EXECUTION_COMPLETE' AS status,
     CURRENT_TIMESTAMP() AS completed_at,
-    'All 17 root load tasks executed and 61 dynamic tables refreshed (30 AGG + 31 REP).' AS summary,
-    'Total: 78 manual operations completed' AS details,
-    'Note: 16 child tasks auto-triggered (15 cleanup + 1 customer status)' AS auto_tasks_info,
-    'Verify data loaded correctly by querying key tables' AS next_step;
+    'All 16 root load tasks executed and 71 dynamic tables refreshed (31 AGG + 40 REP).' AS summary,
+    'Total: 87 manual operations completed (16 tasks + 71 DTs)' AS details,
+    'Note: 17 child tasks auto-triggered (15 cleanup + 1 customer status + 1 DocAI flatten)' AS auto_tasks_info,
+    'Verify data loaded correctly. DocAI extraction pipeline executed (1 root task + 1 auto-triggered flatten).' AS next_step;
 
 -- ============================================================
 -- VERIFICATION QUERIES (Optional - Uncomment to run)

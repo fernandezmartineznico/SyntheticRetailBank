@@ -1,5 +1,5 @@
 -- ============================================================================
--- 754_RISK_REGULATORY_AGENT.sql
+-- 820_RISK_REGULATORY_AGENT.sql
 -- Cross-Domain Risk Aggregation & Regulatory Reporting AI Agent
 -- ============================================================================
 -- Purpose: AI agent for executive risk reporting, regulatory compliance
